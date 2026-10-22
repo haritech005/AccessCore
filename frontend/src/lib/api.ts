@@ -7,6 +7,8 @@ export interface HealthCheckData {
     database: {
       status: 'connected' | 'disconnected' | 'unconfigured';
       message?: string;
+      pgvectorVersion?: string;
+      tablesReady?: boolean;
     };
     ollama: {
       status: 'connected' | 'disconnected' | 'unreachable';

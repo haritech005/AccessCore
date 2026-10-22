@@ -271,7 +271,7 @@ export default function Home() {
                     </span>
                   </div>
                   <div style={{ fontSize: '0.8rem', color: 'var(--text-secondary)' }}>
-                    Port: 5433 | DB: accesscore
+                    pgvector v{health.services.database.pgvectorVersion || '0.8.6'} • Schema Ready
                   </div>
                 </div>
 

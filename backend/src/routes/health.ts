@@ -1,5 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { config } from '../config';
+import { checkDatabaseHealth } from '../db';
 import { ApiSuccessResponse, HealthCheckData } from '../types/api';
 
 const router = Router();
@@ -27,11 +28,9 @@ router.get('/health', async (_req: Request, res: Response) => {
     ollamaMessage = err instanceof Error ? err.message : 'Failed to reach Ollama endpoint';
   }
 
-  const databaseStatus: 'connected' | 'disconnected' | 'unconfigured' = config.DATABASE_URL
-    ? 'connected'
-    : 'unconfigured';
+  const dbHealth = await checkDatabaseHealth();
 
-  const isHealthy = ollamaStatus === 'connected';
+  const isHealthy = ollamaStatus === 'connected' && dbHealth.status === 'connected';
 
   const healthData: HealthCheckData = {
     status: isHealthy ? 'healthy' : 'degraded',
@@ -40,7 +39,10 @@ router.get('/health', async (_req: Request, res: Response) => {
     environment: config.NODE_ENV,
     services: {
       database: {
-        status: databaseStatus,
+        status: dbHealth.status,
+        ...(dbHealth.message ? { message: dbHealth.message } : {}),
+        ...(dbHealth.pgvectorVersion ? { pgvectorVersion: dbHealth.pgvectorVersion } : {}),
+        ...(dbHealth.tablesReady !== undefined ? { tablesReady: dbHealth.tablesReady } : {}),
       },
       ollama: {
         status: ollamaStatus,
