@@ -1,6 +1,8 @@
 import { getClient, query } from '../db';
 import { parseDocument } from '../parsers';
 import { DocumentMetadata, ParsedDocument } from '../types/document';
+import { chunkingService, GeneratedChunk } from './chunkingService';
+import { embeddingService, EMBEDDING_DIMENSION } from './embeddingService';
 
 export class IngestionError extends Error {
   code: string;
@@ -32,6 +34,8 @@ export interface IngestDocumentOutput {
   version_uuid: string;
   status: 'completed' | 'failed' | 'processing';
   content_hash: string;
+  chunks_count: number;
+  embeddings_reused_count: number;
   is_new_version: boolean;
   is_reused: boolean;
   message: string;
@@ -68,7 +72,7 @@ export interface IngestionJobRecord {
   id: string;
   document_id: string;
   version_id: string | null;
-  status: 'pending' | 'parsing' | 'processing' | 'completed' | 'failed';
+  status: 'pending' | 'parsing' | 'chunking' | 'embedding' | 'processing' | 'completed' | 'failed';
   error_message: string | null;
   started_at: string;
   completed_at: string | null;
@@ -81,9 +85,12 @@ export class IngestionService {
    * 2. Checks if document exists.
    * 3. Prevents duplicate versions if content hash is identical to current active version.
    * 4. Stages new version in 'processing' status.
-   * 5. Tracks status and errors in ingestion_jobs.
-   * 6. Atomically publishes the new version only after processing succeeds.
-   * 7. Preserves previous active version if update fails.
+   * 5. Tracks status and errors in ingestion_jobs (chunking -> embedding -> completed).
+   * 6. Splits content into chunks with section headers and character offsets.
+   * 7. Reuses existing embeddings for unchanged chunks to avoid redundant inference.
+   * 8. Generates 768-dim embeddings via Ollama nomic-embed-text.
+   * 9. Atomically publishes the new version and its chunks only after processing succeeds.
+   * 10. Preserves previous active version and chunks if update fails.
    */
   async ingestDocument(input: IngestDocumentInput): Promise<IngestDocumentOutput> {
     const { filename, buffer, overrideMetadata, simulateProcessingFailure } = input;
@@ -140,6 +147,12 @@ export class IngestionService {
       const activeVer = activeVerRes.rows[0];
       if (activeVer && activeVer.content_hash === parsed.content_hash) {
         // Content hash matches active version. Short-circuit safely without creating duplicate version.
+        const chunkCountRes = await query<{ count: string }>(
+          'SELECT count(*) FROM document_chunks WHERE version_id = $1 AND is_active = true',
+          [activeVer.id]
+        );
+        const activeChunksCount = parseInt(chunkCountRes.rows[0]?.count || '0', 10);
+
         const jobRes = await query<{ id: string }>(
           `INSERT INTO ingestion_jobs (
             document_id, version_id, status, error_message, started_at, completed_at
@@ -156,6 +169,8 @@ export class IngestionService {
           version_uuid: activeVer.id,
           status: 'completed',
           content_hash: parsed.content_hash,
+          chunks_count: activeChunksCount,
+          embeddings_reused_count: activeChunksCount,
           is_new_version: false,
           is_reused: true,
           message: `Document content is unchanged. Version ${activeVer.version} remains active.`,
@@ -198,8 +213,84 @@ export class IngestionService {
         throw new Error('Simulated processing failure during document pipeline execution.');
       }
 
-      // In Subphase 1.6, basic content staging is verified.
-      // Downstream Chunking and Embeddings will integrate here in Subphase 1.7.
+      // 5a. Chunking step
+      await query("UPDATE ingestion_jobs SET status = 'chunking' WHERE id = $1", [jobId]);
+      const chunks: GeneratedChunk[] = await chunkingService.splitDocument(parsed);
+
+      if (chunks.length === 0) {
+        throw new Error('Chunking resulted in 0 chunks for document.');
+      }
+
+      // 5b. Embedding Cache Check (Reuse existing chunk vectors from active version if unchanged)
+      const cachedVectorsRes = await query<{ chunk_hash: string; embedding: string }>(
+        `SELECT metadata->>'chunk_hash' AS chunk_hash, embedding::text
+         FROM document_chunks
+         WHERE document_id = $1 AND is_active = true`,
+        [docUuid]
+      );
+
+      const cachedEmbeddingMap = new Map<string, number[]>();
+      for (const row of cachedVectorsRes.rows) {
+        if (row.chunk_hash && row.embedding) {
+          try {
+            const vec = JSON.parse(row.embedding) as number[];
+            if (Array.isArray(vec) && vec.length === EMBEDDING_DIMENSION) {
+              cachedEmbeddingMap.set(row.chunk_hash, vec);
+            }
+          } catch {
+            // Ignore vector deserialization errors
+          }
+        }
+      }
+
+      // 5c. Embedding step
+      await query("UPDATE ingestion_jobs SET status = 'embedding' WHERE id = $1", [jobId]);
+
+      const chunksToEmbed: { index: number; text: string }[] = [];
+      const chunkEmbeddings: (number[] | null)[] = new Array(chunks.length).fill(null);
+      let reusedCount = 0;
+
+      chunks.forEach((chunk, i) => {
+        const cached = cachedEmbeddingMap.get(chunk.chunk_hash);
+        if (cached) {
+          chunkEmbeddings[i] = cached;
+          reusedCount++;
+        } else {
+          chunksToEmbed.push({ index: i, text: chunk.content });
+        }
+      });
+
+      // Generate missing embeddings via Ollama nomic-embed-text
+      if (chunksToEmbed.length > 0) {
+        const newEmbeddings = await embeddingService.generateBatchEmbeddings(
+          chunksToEmbed.map((c) => c.text),
+          4
+        );
+        chunksToEmbed.forEach((item, idx) => {
+          chunkEmbeddings[item.index] = newEmbeddings[idx];
+        });
+      }
+
+      // 5d. Persist staged chunks to PostgreSQL (inactive until atomic publication)
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const embedding = chunkEmbeddings[i]!;
+        const vectorLiteral = `[${embedding.join(',')}]`;
+
+        await query(
+          `INSERT INTO document_chunks (
+            document_id, version_id, chunk_index, content, embedding, metadata, is_active
+          ) VALUES ($1, $2, $3, $4, $5::vector, $6, false)`,
+          [
+            docUuid,
+            versionUuid,
+            chunk.chunk_index,
+            chunk.content,
+            vectorLiteral,
+            JSON.stringify(chunk.metadata),
+          ]
+        );
+      }
 
       // 6. Atomic Publication Transaction
       // Keeps database transaction minimal (milliseconds), isolated from model inference
@@ -231,7 +322,15 @@ export class IngestionService {
           [versionUuid]
         );
 
-        // 6d. Update parent document logical record
+        // 6d. Activate the new chunks
+        await client.query(
+          `UPDATE document_chunks 
+           SET is_active = true 
+           WHERE version_id = $1`,
+          [versionUuid]
+        );
+
+        // 6e. Update parent document logical record
         await client.query(
           `UPDATE documents 
            SET current_version = $2, 
@@ -253,7 +352,7 @@ export class IngestionService {
           ]
         );
 
-        // 6e. Mark ingestion job completed
+        // 6f. Mark ingestion job completed
         await client.query(
           `UPDATE ingestion_jobs 
            SET status = 'completed', completed_at = NOW() 
@@ -277,9 +376,11 @@ export class IngestionService {
         version_uuid: versionUuid,
         status: 'completed',
         content_hash: parsed.content_hash,
+        chunks_count: chunks.length,
+        embeddings_reused_count: reusedCount,
         is_new_version: isNewDoc || targetVersion > 1,
         is_reused: false,
-        message: `Successfully ingested ${docId} as version ${targetVersion}.`,
+        message: `Successfully ingested ${docId} as version ${targetVersion} with ${chunks.length} chunks.`,
         completed_at: new Date().toISOString(),
       };
     } catch (err: unknown) {
@@ -301,6 +402,9 @@ export class IngestionService {
         [errorMsg, jobId]
       );
 
+      // Clean up uncommitted staged chunks for this failed version
+      await query('DELETE FROM document_chunks WHERE version_id = $1', [versionUuid]);
+
       // If this was an initial creation attempt (v1), mark document failed
       if (isNewDoc) {
         await query(
@@ -310,8 +414,7 @@ export class IngestionService {
           [errorMsg, docUuid]
         );
       }
-      // If it was an update to an existing document, notice we DO NOT touch the previous active version!
-      // The previous version remains 'active', and current_version on documents remains unchanged.
+      // If it was an update to an existing document, the previous active version and its chunks remain untouched!
 
       throw new IngestionError(
         `Ingestion failed for '${filename}': ${errorMsg}`,
@@ -353,11 +456,12 @@ export class IngestionService {
   }
 
   /**
-   * Get full details for a single document including all versions.
+   * Get full details for a single document including all versions and active chunk count.
    */
   async getDocumentById(documentId: string): Promise<{
     document: DocumentRecord;
     versions: DocumentVersionRecord[];
+    active_chunks_count: number;
   } | null> {
     const docRes = await query<DocumentRecord>(
       'SELECT id, document_id, title, filename, format, current_version, status, error_message, metadata, created_at, updated_at FROM documents WHERE document_id = $1',
@@ -378,9 +482,15 @@ export class IngestionService {
       [doc.id]
     );
 
+    const chunkCountRes = await query<{ count: string }>(
+      'SELECT count(*) FROM document_chunks WHERE document_id = $1 AND is_active = true',
+      [doc.id]
+    );
+
     return {
       document: doc,
       versions: verRes.rows,
+      active_chunks_count: parseInt(chunkCountRes.rows[0]?.count || '0', 10),
     };
   }
 

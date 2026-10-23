@@ -11,7 +11,8 @@
     "db:test": "tsx src/db/testVector.ts",
     "contracts:validate": "tsx src/contracts/validateDataset.ts",
     "parsers:test": "tsx src/parsers/testParsers.ts",
-    "ingestion:test": "tsx src/services/testIngestion.ts"
+    "ingestion:test": "tsx src/services/testIngestion.ts",
+    "chunks:test": "tsx src/services/testChunking.ts"
   },
   "keywords": [
     "accesscore",
@@ -21,6 +22,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@langchain/textsplitters": "^1.0.2",
     "cors": "^2.8.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
