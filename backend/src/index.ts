@@ -3,6 +3,7 @@ import cors from 'cors';
 import { config } from './config';
 import healthRouter from './routes/health';
 import documentsRouter from './routes/documents';
+import retrievalRouter from './routes/retrieval';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -21,6 +22,7 @@ app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 app.use(healthRouter);
 app.use('/api', healthRouter);
 app.use('/api', documentsRouter);
+app.use('/api', retrievalRouter);
 
 // 404 and Error handling
 app.use(notFoundHandler);
