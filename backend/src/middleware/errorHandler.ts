@@ -35,9 +35,10 @@ export function errorHandler(
   res: Response,
   _next: NextFunction
 ): void {
-  const statusCode = err instanceof AppError ? err.statusCode : 500;
-  const code = err instanceof AppError ? err.code : 'INTERNAL_SERVER_ERROR';
-  const details = err instanceof AppError ? err.details : undefined;
+  const anyErr = err as { statusCode?: number; code?: string; details?: unknown };
+  const statusCode = typeof anyErr.statusCode === 'number' ? anyErr.statusCode : 500;
+  const code = typeof anyErr.code === 'string' ? anyErr.code : 'INTERNAL_SERVER_ERROR';
+  const details = anyErr.details;
 
   const response: ApiErrorResponse = {
     success: false,

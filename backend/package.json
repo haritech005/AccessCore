@@ -10,7 +10,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:test": "tsx src/db/testVector.ts",
     "contracts:validate": "tsx src/contracts/validateDataset.ts",
-    "parsers:test": "tsx src/parsers/testParsers.ts"
+    "parsers:test": "tsx src/parsers/testParsers.ts",
+    "ingestion:test": "tsx src/services/testIngestion.ts"
   },
   "keywords": [
     "accesscore",

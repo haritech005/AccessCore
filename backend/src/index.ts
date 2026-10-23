@@ -2,6 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import { config } from './config';
 import healthRouter from './routes/health';
+import documentsRouter from './routes/documents';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -13,11 +14,13 @@ app.use(
   })
 );
 
-app.use(express.json());
+app.use(express.json({ limit: '20mb' }));
+app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
-// Health check endpoints
+// API endpoints
 app.use(healthRouter);
 app.use('/api', healthRouter);
+app.use('/api', documentsRouter);
 
 // 404 and Error handling
 app.use(notFoundHandler);
