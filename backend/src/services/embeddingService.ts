@@ -19,9 +19,9 @@ export class EmbeddingService {
   private baseUrl: string;
   private model: string;
 
-  constructor() {
-    this.baseUrl = config.OLLAMA_BASE_URL.replace(/\/$/, '');
-    this.model = config.OLLAMA_EMBEDDING_MODEL;
+  constructor(options?: { baseUrl?: string; model?: string }) {
+    this.baseUrl = (options?.baseUrl || config.OLLAMA_BASE_URL).replace(/\/$/, '');
+    this.model = options?.model || config.OLLAMA_EMBEDDING_MODEL;
   }
 
   /**

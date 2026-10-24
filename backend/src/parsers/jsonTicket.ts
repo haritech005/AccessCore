@@ -39,6 +39,8 @@ export interface TicketContent {
   customer_report?: string;
   error_codes?: string[];
   investigation_notes?: TicketInvestigationNotes;
+  resolution_status?: string;
+  resolution_notes?: string;
   [key: string]: unknown;
 }
 
@@ -81,55 +83,70 @@ export function formatTicketToText(
     );
   }
 
+  // Put Issue Summary & Resolution Status right at the top so any overview chunk includes the unconfirmed status
+  const summaryStatus: string[] = ['## Issue Summary & Status'];
   if (content.issue_summary) {
-    sections.push(`## Issue Summary\n${content.issue_summary}`);
+    summaryStatus.push(`**Issue Summary:** ${content.issue_summary}`);
   }
+  if (content.resolution_status) {
+    summaryStatus.push(`**Resolution Status:** ${content.resolution_status} (Exact root cause NOT confirmed)`);
+  }
+  if (content.resolution_notes) {
+    summaryStatus.push(`**Resolution Notes:** ${content.resolution_notes}`);
+  }
+  if (content.error_codes && content.error_codes.length > 0) {
+    summaryStatus.push(`**Error Codes:** ${content.error_codes.join(', ')}`);
+  }
+  sections.push(summaryStatus.join('\n'));
 
   if (content.customer_report) {
-    sections.push(`## Customer Report\n${content.customer_report}`);
-  }
-
-  if (content.error_codes && content.error_codes.length > 0) {
-    sections.push(`## Error Codes\n${content.error_codes.join(', ')}`);
+    sections.push(`## Customer Report (Customer Suspicions)\n${content.customer_report}`);
   }
 
   const notes = content.investigation_notes;
   if (notes) {
-    sections.push(`## Investigation Notes`);
+    const notesParts: string[] = ['## Investigation Findings & Hypotheses'];
 
     if (notes.confirmed_observations && notes.confirmed_observations.length > 0) {
-      sections.push(
-        `### Confirmed Observations\n` +
+      notesParts.push(
+        `**Confirmed Observations:**\n` +
           notes.confirmed_observations.map((o) => `- ${o}`).join('\n')
       );
     }
 
     if (notes.hypotheses_not_confirmed && notes.hypotheses_not_confirmed.length > 0) {
-      sections.push(
-        `### Hypotheses Not Confirmed\n` +
+      notesParts.push(
+        `**Unconfirmed Hypotheses (Potential Contributing Factors - NOT Established as Facts):**\n` +
           notes.hypotheses_not_confirmed.map((h) => `- ${h}`).join('\n')
       );
     }
 
     if (notes.actions_taken && notes.actions_taken.length > 0) {
-      sections.push(
-        `### Actions Taken\n` + notes.actions_taken.map((a) => `- ${a}`).join('\n')
+      notesParts.push(
+        `**Actions Taken:**\n` + notes.actions_taken.map((a) => `- ${a}`).join('\n')
       );
     }
 
     if (notes.open_questions && notes.open_questions.length > 0) {
-      sections.push(
-        `### Open Questions\n` + notes.open_questions.map((q) => `- ${q}`).join('\n')
+      notesParts.push(
+        `**Open Questions (Unknown / Unmeasured Information):**\n` +
+          notes.open_questions.map((q) => `- ${q}`).join('\n')
       );
     }
 
     if (notes.escalation_status) {
-      sections.push(`**Escalation Status:** ${notes.escalation_status}`);
+      notesParts.push(`**Escalation Status:** ${notes.escalation_status}`);
     }
 
     if (notes.escalation_trigger) {
-      sections.push(`**Escalation Trigger:** ${notes.escalation_trigger}`);
+      notesParts.push(`**Escalation Trigger:** ${notes.escalation_trigger}`);
     }
+
+    sections.push(notesParts.join('\n\n'));
+  }
+
+  if (content.approved_summary) {
+    sections.push(`## Approved Customer Summary\n${content.approved_summary}`);
   }
 
   return sections.join('\n\n').trim();

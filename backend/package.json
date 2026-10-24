@@ -14,7 +14,8 @@
     "ingestion:test": "tsx src/services/testIngestion.ts",
     "chunks:test": "tsx src/services/testChunking.ts",
     "retrieval:test": "tsx src/services/testRetrieval.ts",
-    "rag:test": "tsx src/services/testRag.ts"
+    "rag:test": "tsx src/services/testRag.ts",
+    "resilience:test": "tsx src/services/testFailureModes.ts"
   },
   "keywords": [
     "accesscore",

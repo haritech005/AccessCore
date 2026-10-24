@@ -18,13 +18,29 @@ export interface RAGQueryOptions {
 export const INSUFFICIENT_EVIDENCE_MESSAGE =
   'I do not have sufficient evidence in the provided documents to answer this question.';
 
+/**
+ * Deduplicates contiguous or clustered bracketed citation references in the generated answer text.
+ * For example: "[TKT-10467] [TKT-10467] [PDOC-0003] [PDOC-0003]" -> "[TKT-10467] [PDOC-0003]"
+ * Preserves genuinely distinct citations.
+ */
+export function deduplicateInlineCitations(text: string): string {
+  let cleaned = text.replace(/((?:\[[A-Z]{2,5}-[0-9]{3,5}\](?:,\s*|\s*))+)/g, (match) => {
+    const ids = [...match.matchAll(/\[([A-Z]{2,5}-[0-9]{3,5})\]/g)].map((m) => m[1]);
+    const uniqueIds = Array.from(new Set(ids));
+    return uniqueIds.map((id) => `[${id}]`).join(' ');
+  });
+  // Ensure space after citation bracket when followed by an alphanumeric character
+  cleaned = cleaned.replace(/(\[[A-Z]{2,5}-[0-9]{3,5}\])([A-Za-z0-9])/g, '$1 $2');
+  return cleaned.trim();
+}
+
 export class RAGService {
   private baseUrl: string;
   private defaultModel: string;
 
-  constructor() {
-    this.baseUrl = config.OLLAMA_BASE_URL.replace(/\/$/, '');
-    this.defaultModel = config.OLLAMA_CHAT_MODEL;
+  constructor(options?: { baseUrl?: string; defaultModel?: string }) {
+    this.baseUrl = (options?.baseUrl || config.OLLAMA_BASE_URL).replace(/\/$/, '');
+    this.defaultModel = options?.defaultModel || config.OLLAMA_CHAT_MODEL;
   }
 
   /**
@@ -61,26 +77,32 @@ ${chunk.content}`;
     }
 
     // Extract document IDs like [PDOC-0001], [PDOC-0002, PDOC-0001], or PDOC-0001
-    const idMatches = [...answer.matchAll(/([A-Z]{2,4}-[0-9]{3,5})/g)];
-    const citedIds = new Set<string>(idMatches.map((m) => m[1]));
+    const idMatches = [...answer.matchAll(/([A-Z]{2,5}-[0-9]{3,5})/g)];
+    const citedIds = new Set<string>(
+      idMatches.map((m) => {
+        let id = m[1];
+        if (id.startsWith('CDOC-')) id = id.replace('CDOC-', 'PDOC-');
+        return id;
+      })
+    );
 
     const validatedCitations: Citation[] = [];
     const addedDocIds = new Set<string>();
 
-    for (const docId of citedIds) {
-      const sourceChunk = chunkByDocId.get(docId);
-      if (sourceChunk && !addedDocIds.has(docId)) {
-        addedDocIds.add(docId);
-        const snippetText = sourceChunk.content.slice(0, 200).trim();
+    // Order citations by relevance according to retrievedChunks rank
+    for (const chunk of retrievedChunks) {
+      if (citedIds.has(chunk.document_id) && !addedDocIds.has(chunk.document_id)) {
+        addedDocIds.add(chunk.document_id);
+        const snippetText = chunk.content.slice(0, 200).trim();
         validatedCitations.push({
-          document_id: sourceChunk.document_id,
-          title: sourceChunk.metadata.title,
-          chunk_index: sourceChunk.chunk_index,
-          snippet: snippetText + (sourceChunk.content.length > 200 ? '...' : ''),
-          source_location: sourceChunk.metadata.section_heading || 'Document Passage',
-          tenant_id: sourceChunk.metadata.tenant_id,
-          sensitivity: sourceChunk.metadata.sensitivity,
-          disclosure_policy: sourceChunk.metadata.disclosure_policy,
+          document_id: chunk.document_id,
+          title: chunk.metadata.title,
+          chunk_index: chunk.chunk_index,
+          snippet: snippetText + (chunk.content.length > 200 ? '...' : ''),
+          source_location: chunk.metadata.section_heading || 'Document Passage',
+          tenant_id: chunk.metadata.tenant_id,
+          sensitivity: chunk.metadata.sensitivity,
+          disclosure_policy: chunk.metadata.disclosure_policy,
         });
       }
     }
@@ -106,19 +128,29 @@ ${chunk.content}`;
   }
 
   /**
-   * Checks if the generated answer indicates insufficient evidence.
+   * Checks if the generated answer indicates a genuine refusal due to insufficient evidence.
    */
   private checkInsufficientEvidence(answer: string): boolean {
-    const lower = answer.toLowerCase();
+    // Strip leading citation tags like [PDOC-0001], [PDOC-0002] to inspect the core statement
+    const cleaned = answer
+      .replace(/^(\[[^\]]+\]\s*,?\s*)+/, '')
+      .trim()
+      .toLowerCase();
+
     return (
-      lower.includes('do not have sufficient evidence') ||
-      lower.includes('not have sufficient evidence') ||
-      lower.includes('insufficient evidence') ||
-      lower.includes('not enough information') ||
-      lower.includes('provided documents do not contain') ||
-      lower.includes('provided context does not contain') ||
-      lower.includes('no mention of') ||
-      lower.includes('provided evidence does not')
+      cleaned === INSUFFICIENT_EVIDENCE_MESSAGE.toLowerCase() ||
+      cleaned.startsWith('i do not have sufficient evidence') ||
+      cleaned.startsWith('i don\'t have sufficient evidence') ||
+      cleaned.startsWith('insufficient evidence') ||
+      cleaned.includes('do not contain any information') ||
+      cleaned.includes('does not contain any information') ||
+      cleaned.includes('do not contain information regarding') ||
+      cleaned.includes('does not contain information regarding') ||
+      cleaned.includes('no information is provided in the documents regarding') ||
+      cleaned.includes('not enough information in the provided documents to answer') ||
+      (cleaned.length < 200 &&
+        (cleaned.includes('do not have sufficient evidence') ||
+          cleaned.includes('not enough information to answer')))
     );
   }
 
@@ -179,12 +211,20 @@ ${chunk.content}`;
 Your task is to answer the user's question accurately and STRICTLY based on the provided evidence items.
 
 CRITICAL GROUNDING RULES:
-1. ONLY state facts that are directly supported by the evidence items below. Do NOT assume, extrapolate, or invent details not present in the context.
-2. CITATIONS: Whenever you state a fact or recommendation, reference the source document ID in square brackets, for example [PDOC-0001] or [TKT-10421].
-3. INSUFFICIENT EVIDENCE: If the evidence does not contain sufficient facts to answer the question, or if the question asks for information not in the evidence, you MUST state:
+1. FACTUAL GROUNDING & UNCONFIRMED HYPOTHESES:
+- Answer the user's question directly, accurately, and strictly using the facts in the evidence items below.
+- STRICTLY distinguish confirmed facts from unconfirmed hypotheses, customer reports, or open questions.
+- If a document or ticket states that an issue's root cause is unconfirmed or under investigation, you MUST explicitly state that the exact root cause has NOT been confirmed.
+- When describing suspected causes or customer suspicions, state them ONLY as unconfirmed hypotheses or possibilities under investigation. NEVER state or assert that suspected causes or reported behaviors are confirmed facts unless verified evidence establishes this.
+- If asked about actual request volumes, polling frequencies, or unmeasured metrics, state that they have not been established or measured and remain unknown.
+2. CITATIONS & DEDUPLICATION:
+- Whenever you state a fact, observation, or recommendation, include the EXACT Document ID shown in the evidence item headers in square brackets, e.g. [PDOC-0001] or [TKT-10467]. Do not invent prefixes or alter document IDs.
+- Do NOT output consecutive duplicate citations (e.g. never write "[TKT-10467] [TKT-10467]").
+3. OUT-OF-SCOPE QUESTIONS:
+- If the question asks about something completely unrelated to CloudDesk or absent from all provided documents, reply:
 "I do not have sufficient evidence in the provided documents to answer this question."
 Do NOT fabricate an answer, speculate, or mention ungrounded external facts.
-4. Tone: Clear, direct, and professional.`,
+4. Tone: Clear, direct, objective, and professional.`,
       ],
       [
         'human',
@@ -217,7 +257,7 @@ GROUNDED ANSWER:`,
         context: contextText,
         question: cleanQuestion,
       });
-      rawAnswer = rawAnswer.trim();
+      rawAnswer = deduplicateInlineCitations(rawAnswer.trim());
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       throw new AppError(
