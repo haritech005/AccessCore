@@ -35,8 +35,34 @@ export function parseMarkdown(
     );
   }
 
-  // Merge frontmatter with any explicit caller overrides
+  const basename = filename.replace(/\.[^/.]+$/, '');
+  const idMatch = basename.match(/^([A-Z]{2,4}-[0-9]{3,5})/);
+  const derivedId = idMatch ? idMatch[1] : undefined;
+  const nowIso = new Date().toISOString();
+
+  // Extract first # heading as title if available
+  const headingMatch = body.match(/^#\s+(.+)$/m);
+  const derivedTitle = headingMatch
+    ? headingMatch[1].trim()
+    : basename.replace(/^[A-Z]{2,4}-[0-9]{3,5}[-_ ]*/, '').replace(/[-_]/g, ' ').trim() || 'Untitled Document';
+
+  const defaultMetadata: Record<string, unknown> = {
+    document_id: derivedId,
+    title: derivedTitle,
+    document_type: 'product_doc',
+    tenant_id: 'global',
+    owner_team: 'engineering',
+    allowed_groups: ['grp_engineering'],
+    sensitivity: 'internal',
+    disclosure_policy: 'internal_only',
+    created_at: nowIso,
+    updated_at: nowIso,
+    version: '1.0',
+  };
+
+  // Merge defaults, extracted frontmatter, and explicit caller overrides
   const mergedMetadata = {
+    ...defaultMetadata,
     ...rawMetadata,
     ...(overrideMetadata || {}),
   };

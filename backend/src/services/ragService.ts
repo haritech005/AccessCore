@@ -60,8 +60,8 @@ ${chunk.content}`;
       }
     }
 
-    // Extract bracketed document IDs like [PDOC-0001] or [TKT-10421]
-    const idMatches = [...answer.matchAll(/\[([A-Z]{2,4}-[0-9]{3,5})\]/g)];
+    // Extract document IDs like [PDOC-0001], [PDOC-0002, PDOC-0001], or PDOC-0001
+    const idMatches = [...answer.matchAll(/([A-Z]{2,4}-[0-9]{3,5})/g)];
     const citedIds = new Set<string>(idMatches.map((m) => m[1]));
 
     const validatedCitations: Citation[] = [];
