@@ -16,7 +16,6 @@ export function CitationDrawer({
   onSelectCitation,
   onClose,
 }: CitationDrawerProps) {
-  // Close on ESC key
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -54,7 +53,6 @@ export function CitationDrawer({
       }}
     >
       <div className="drawer-panel" role="dialog" aria-modal="true" aria-labelledby="citation-drawer-title">
-        {/* Drawer Header */}
         <div
           style={{
             padding: '20px 24px',
