@@ -12,6 +12,7 @@ const envSchema = z.object({
   OLLAMA_EMBEDDING_MODEL: z.string().default('nomic-embed-text'),
   FRONTEND_URL: z.string().default('http://localhost:3000'),
   AUTH_SECRET: z.string().default('accesscore-dev-auth-secret-key-32-chars-minimum!'),
+  DEV_USER_PASSWORD: z.string().default('CloudDesk2026!'),
 });
 
 const parsed = envSchema.safeParse(process.env);

@@ -17,7 +17,10 @@
     "rag:test": "tsx src/services/testRag.ts",
     "resilience:test": "tsx src/services/testFailureModes.ts",
     "identity:test": "tsx src/services/testIdentitySchema.ts",
-    "auth:test": "tsx src/services/testAuth.ts"
+    "auth:test": "tsx src/services/testAuth.ts",
+    "db:seed:identities": "tsx src/db/seedIdentities.ts",
+    "identities:test": "tsx src/services/testIdentitiesSeed.ts",
+    "auth:responses:test": "tsx src/services/testAuthorizationResponses.ts"
   },
   "keywords": [
     "accesscore",

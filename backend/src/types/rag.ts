@@ -29,6 +29,7 @@ export interface RAGAnswerResponse {
   answer: string;
   citations: Citation[];
   insufficient_evidence: boolean;
+  unauthorized_access: boolean;
   retrieved_chunks: {
     document_id: string;
     chunk_index: number;

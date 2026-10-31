@@ -8,6 +8,7 @@ export interface RetrievalResult {
   chunks: RetrievedChunk[];
   total_retrieved: number;
   latency_ms: number;
+  has_blocked_top_match?: boolean;
 }
 
 export class RetrievalService {
@@ -36,6 +37,77 @@ export class RetrievalService {
     // 1. Generate 768-dimensional query vector using local embedding model
     const queryEmbedding = await embeddingService.generateEmbedding(cleanQuery);
     const queryVectorLiteral = `[${queryEmbedding.join(',')}]`;
+
+    // 1b. Pre-check: If tenant_scope or user_groups are defined, check whether the primary matching
+    // indexed evidence (or an explicitly cited document ID) is blocked by the caller's authorization.
+    if ((tenant_scope && tenant_scope.length > 0) || (user_groups && user_groups.length > 0)) {
+      const docIdMatches = [...cleanQuery.matchAll(/\b([A-Z]{2,5}-[0-9]{3,5})\b/g)].map((m) => m[1]);
+
+      const topCheckParams: unknown[] = [queryVectorLiteral];
+      let docIdClause = '';
+      if (docIdMatches.length > 0) {
+        topCheckParams.push(docIdMatches);
+        docIdClause = `OR d.document_id = ANY($${topCheckParams.length}::text[])`;
+      }
+      topCheckParams.push(min_similarity > 0 ? min_similarity : 0.35);
+
+      const topCheckSql = `
+        SELECT 
+          d.document_id,
+          c.metadata->>'tenant_id' as tenant_id,
+          c.metadata->'allowed_groups' as allowed_groups,
+          c.metadata->>'sensitivity' as sensitivity,
+          (1 - (c.embedding <=> $1::vector)) as similarity
+        FROM document_chunks c
+        JOIN documents d ON c.document_id = d.id
+        JOIN document_versions v ON c.version_id = v.id
+        WHERE c.is_active = true AND d.status = 'completed' AND v.status = 'active'
+          AND (
+            (1 - (c.embedding <=> $1::vector)) >= $${topCheckParams.length}
+            ${docIdClause}
+          )
+        ORDER BY c.embedding <=> $1::vector ASC
+        LIMIT 1
+      `;
+
+      const topCheckRes = await query<{
+        document_id: string;
+        tenant_id: string;
+        allowed_groups: string[];
+        sensitivity: string;
+        similarity: number;
+      }>(topCheckSql, topCheckParams);
+
+      if (topCheckRes.rows.length > 0) {
+        const top = topCheckRes.rows[0];
+        const hasTenant =
+          top.tenant_id === 'global' ||
+          (tenant_scope && (tenant_scope.includes('*') || tenant_scope.includes(top.tenant_id)));
+        const hasGroup =
+          !user_groups ||
+          user_groups.length === 0 ||
+          (Array.isArray(top.allowed_groups) &&
+            (top.allowed_groups.includes('grp_public') ||
+              user_groups.some((g) => top.allowed_groups.includes(g))));
+        const hasClearance =
+          top.sensitivity !== 'restricted' ||
+          (user_groups &&
+            (user_groups.includes('grp_security_restricted') ||
+              user_groups.includes('grp_incident_review')));
+
+        if (!hasTenant || !hasGroup || !hasClearance) {
+          // The most relevant document for this question is blocked by authorization.
+          // Do NOT return lower-ranked fallback chunks from other tenants to the LLM.
+          return {
+            query: cleanQuery,
+            chunks: [],
+            total_retrieved: 0,
+            latency_ms: Date.now() - startTime,
+            has_blocked_top_match: true,
+          };
+        }
+      }
+    }
 
     // 2. Build pgvector cosine similarity search query
     // Cosine distance <=> range is [0, 2], cosine similarity is 1 - distance
@@ -75,7 +147,18 @@ export class RetrievalService {
     // Optional user groups filter
     if (user_groups && user_groups.length > 0) {
       params.push(user_groups);
-      sql += ` AND (c.metadata->'allowed_groups' ?| $${params.length})`;
+      sql += ` AND (c.metadata->'allowed_groups' ?| $${params.length} OR c.metadata->'allowed_groups' ? 'grp_public')`;
+    }
+
+    // Restricted sensitivity clearance check:
+    // If caller does not belong to security restricted clearance groups, strictly exclude restricted sensitivity chunks
+    const hasRestrictedClearance =
+      user_groups &&
+      (user_groups.includes('grp_security_restricted') ||
+        user_groups.includes('grp_incident_review'));
+
+    if (!hasRestrictedClearance) {
+      sql += ` AND (c.metadata->>'sensitivity' IS DISTINCT FROM 'restricted')`;
     }
 
     params.push(effectiveTopK);
@@ -133,6 +216,90 @@ export class RetrievalService {
       total_retrieved: retrievedChunks.length,
       latency_ms: latencyMs,
     };
+  }
+
+  /**
+   * Evaluates whether there is indexed evidence matching the query that was filtered out
+   * exclusively because of authorization barriers (tenant isolation, group permissions,
+   * or restricted sensitivity clearance).
+   *
+   * Crucial: This method strictly returns a boolean and does not expose chunk contents,
+   * document IDs, titles, or metadata to callers.
+   */
+  async hasBlockedMatchingEvidence(options: {
+    query: string;
+    min_similarity?: number;
+    tenant_scope?: string[];
+    user_groups?: string[];
+  }): Promise<boolean> {
+    const { query: userQuery, min_similarity = 0.35, tenant_scope = [], user_groups = [] } = options;
+
+    if (!userQuery || userQuery.trim().length === 0) {
+      return false;
+    }
+
+    // 1. Generate query embedding
+    const queryEmbedding = await embeddingService.generateEmbedding(userQuery.trim());
+    const queryVectorLiteral = `[${queryEmbedding.join(',')}]`;
+
+    // 2. Extract any document IDs directly mentioned in the question (e.g., TKT-10421, PDOC-0001)
+    const docIdMatches = [...userQuery.matchAll(/\b([A-Z]{2,5}-[0-9]{3,5})\b/g)].map((m) => m[1]);
+
+    const hasRestrictedClearance =
+      user_groups.includes('grp_security_restricted') ||
+      user_groups.includes('grp_incident_review');
+
+    // 3. Query PostgreSQL for matching chunks that are EXCLUDED by the user's authorization bounds
+    const params: unknown[] = [queryVectorLiteral, min_similarity];
+
+    let docIdFilter = '';
+    if (docIdMatches.length > 0) {
+      params.push(docIdMatches);
+      docIdFilter = `OR d.document_id = ANY($${params.length}::text[])`;
+    }
+
+    params.push(tenant_scope);
+    const tenantParamIdx = params.length;
+
+    params.push(user_groups);
+    const groupsParamIdx = params.length;
+
+    params.push(hasRestrictedClearance);
+    const clearanceParamIdx = params.length;
+
+    const sql = `
+      SELECT 1
+      FROM document_chunks c
+      JOIN documents d ON c.document_id = d.id
+      JOIN document_versions v ON c.version_id = v.id
+      WHERE c.is_active = true
+        AND d.status = 'completed'
+        AND v.status = 'active'
+        AND (
+          (1 - (c.embedding <=> $1::vector)) >= $2
+          ${docIdFilter}
+        )
+        AND (
+          -- Excluded by tenant scope (not global, and not in user's tenant_scope)
+          (c.metadata->>'tenant_id' != 'global' AND NOT (c.metadata->>'tenant_id' = ANY($${tenantParamIdx}::text[])))
+          OR
+          -- Excluded by group permissions (no matching group and not grp_public)
+          (
+            NOT (c.metadata->'allowed_groups' ?| $${groupsParamIdx}::text[])
+            AND NOT (c.metadata->'allowed_groups' ? 'grp_public')
+          )
+          OR
+          -- Excluded by restricted sensitivity clearance
+          (
+            c.metadata->>'sensitivity' = 'restricted'
+            AND NOT ($${clearanceParamIdx}::boolean)
+          )
+        )
+      LIMIT 1
+    `;
+
+    const res = await query(sql, params);
+    return res.rows.length > 0;
   }
 }
 

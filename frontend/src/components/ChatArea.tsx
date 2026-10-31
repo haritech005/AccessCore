@@ -11,6 +11,7 @@ export interface ChatMessage {
   timestamp: string;
   citations?: Citation[];
   insufficientEvidence?: boolean;
+  unauthorizedAccess?: boolean;
   latencyMs?: {
     retrieval: number;
     generation: number;
@@ -283,34 +284,6 @@ export function ChatArea({
                   backdropFilter: 'blur(10px)',
                 }}
               >
-                {/* Insufficient Evidence Alert Banner */}
-                {msg.insufficientEvidence && (
-                  <div
-                    style={{
-                      background: 'rgba(245, 158, 11, 0.1)',
-                      border: '1px solid rgba(245, 158, 11, 0.3)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '10px 14px',
-                      marginBottom: '14px',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '8px',
-                      color: '#fbbf24',
-                      fontSize: '0.8rem',
-                    }}
-                  >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <circle cx="12" cy="12" r="10" />
-                      <line x1="12" y1="8" x2="12" y2="12" />
-                      <line x1="12" y1="16" x2="12.01" y2="16" />
-                    </svg>
-                    <span>
-                      Evidence Grounding Alert: The system refused to speculate because insufficient indexed
-                      evidence was found.
-                    </span>
-                  </div>
-                )}
-
                 {/* Answer Content */}
                 <div
                   style={{

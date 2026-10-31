@@ -106,6 +106,7 @@ export default function Home() {
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           citations: result.data.citations,
           insufficientEvidence: result.data.insufficient_evidence,
+          unauthorizedAccess: result.data.unauthorized_access,
           latencyMs: result.data.latency_ms,
           retrievedChunksCount: result.data.retrieved_chunks.length,
         };
