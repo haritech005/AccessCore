@@ -109,17 +109,42 @@ NODE_ENV="development"
 FRONTEND_URL="http://localhost:3000"
 ```
 
-4. Run Database Migrations:
+4. Run Database Migrations & Seed Development Identities:
 ```bash
 cd backend
 npm install
-npm run migrate
+npm run db:migrate
+npm run db:seed:identities
 ```
 
 This sets up:
-- `documents`: Document registry, formats, SHA-256 hashes, current active version pointers.
-- `document_versions`: Version history, lifecycle states (`staged`, `active`, `archived`, `failed`), diagnostic error logs.
-- `document_chunks`: Chunk content, chunk hashes, metadata, section headings, and 768-dim `vector(768)` embeddings with `ivfflat` cosine similarity index.
+- **Phase 1 Schema (`001_initial_schema.sql`):**
+  - `documents`: Document registry, formats, SHA-256 hashes, current active version pointers.
+  - `document_versions`: Version history, lifecycle states (`staged`, `active`, `archived`, `failed`), diagnostic error logs.
+  - `document_chunks`: Chunk content, chunk hashes, metadata, section headings, and 768-dim `vector(768)` embeddings with `ivfflat` cosine similarity index.
+  - `ingestion_jobs`: Ingestion run logs and pipeline diagnostics.
+- **Phase 2 Identity & Access Schema (`002_identity_and_permissions.sql`):**
+  - `tenants`: Multi-tenant registry (`global`, `ten_brightwave`, `ten_harborpine`, `ten_lumenfield`).
+  - `access_groups`: Security group definitions (`grp_all_employees`, `grp_support`, `grp_it_security`, `grp_security_restricted`, `grp_incident_review`, etc.).
+  - `users`: User profiles with cryptographic bcrypt password hashes, account lifecycle states (`active`, `suspended`, `inactive`), and roles.
+  - `user_groups` & `user_tenants`: Authoritative many-to-many relationship tables.
+
+### Development Test Accounts (CloudDesk Personas)
+All test accounts are seeded with default development password `CloudDesk2026!`:
+| User ID | Name | Role / Persona | Tenant Scope | Clearance / Security Groups |
+|---|---|---|---|---|
+| `emp_001` | Priya Raman | Support Agent | `ten_brightwave`, `ten_lumenfield` | `grp_all_employees`, `grp_support` |
+| `emp_002` | Marcus Webb | Support Agent | `ten_harborpine`, `ten_lumenfield` | `grp_all_employees`, `grp_support` |
+| `emp_003` | Elena Duarte | Support Lead | `*` (All customer tenants) | `grp_all_employees`, `grp_support`, `grp_support_leads` |
+| `emp_004` | Tomas Eriksen | CSM | `ten_brightwave`, `ten_harborpine` | `grp_all_employees`, `grp_customer_success` |
+| `emp_005` | Aisha Khan | CS Manager | `*` (All customer tenants) | `grp_all_employees`, `grp_customer_success`, `grp_cs_managers` |
+| `emp_006` | Daniel Okafor | Engineer | `*` (All customer tenants) | `grp_all_employees`, `grp_engineering` |
+| `emp_007` | Mei Lin Chen | Eng Manager | `*` (All customer tenants) | `grp_engineering`, `grp_incident_review` (Restricted Clearance) |
+| `emp_008` | Rafael Santos | IT Security Admin | `global` (Customer isolated) | `grp_it_security`, `grp_security_restricted` (Restricted Clearance) |
+| `cu_001` | Hannah Brooks | Customer User | `ten_brightwave` (Strict Quarantine) | `cust_ten_brightwave_users`, `grp_public` |
+| `cu_002` | Leo Navarro | Customer User | `ten_harborpine` (Strict Quarantine) | `cust_ten_harborpine_users`, `grp_public` |
+| `cu_003` | Grace Okoye | Customer User | `ten_lumenfield` (Strict Quarantine) | `cust_ten_lumenfield_users`, `grp_public` |
+| `emp_099` | Inactive Tester | Suspended Agent | `ten_brightwave` | Account `suspended` (Strict Lockout) |
 
 ---
 
@@ -209,26 +234,39 @@ npm run dev
 
 ## 7. Running Test Suites
 
-Execute any of the test suites from `backend/`:
+AccessCore includes a comprehensive automated test battery covering foundation pipelines, identity schemas, vector retrieval, and end-to-end security policies. Execute any test suite from `backend/`:
 
+### Foundation Test Suites (Phase 1)
 | Suite | Command | What It Verifies |
 |---|---|---|
-| **Dataset Validation** | `npm run contracts:validate` | Validates schema conformance against CloudDesk company blueprint. |
+| **Dataset Validation** | `npm run contracts:validate` | Validates schema conformance against CloudDesk company blueprint (7 tests). |
 | **Document Parsers** | `npm run parsers:test` | Markdown, JSON, PDF parsing, boundary checks, and security validation (52 tests). |
 | **Ingestion & Versioning** | `npm run ingestion:test` | Version staging, atomic publication, rollback on error, and deduplication (40 tests). |
 | **Chunking & Embeddings** | `npm run chunks:test` | Text splitting, offset preservation, Ollama embeddings, and pgvector persistence (35 tests). |
 | **Vector Retrieval** | `npm run retrieval:test` | Cosine similarity search, top-k ranking, threshold filtering, and inactive version exclusion (26 tests). |
-| **RAG Grounded Pipeline** | `npm run rag:test` | Grounded answers, citation extraction, provenance tracking, and insufficient-evidence handling (23 tests). |
+| **RAG Grounded Pipeline** | `npm run rag:test` | Grounded answers, citation extraction, provenance tracking, and insufficient-evidence handling (22 tests). |
 | **Resilience & Failure Modes** | `npm run resilience:test` | Controlled error handling when database or Ollama services are unreachable (4 tests). |
-| **Frontend Production Build** | `cd frontend && npm run build` | Next.js Turbopack compilation and TypeScript validation. |
+
+### Identity, Access Control & Security Test Suites (Phase 2)
+| Suite | Command | What It Verifies |
+|---|---|---|
+| **Identity Schema** | `npm run identity:test` | Typed models, tenant registries, access groups, and SQL migration integrity (33 tests). |
+| **Authentication Integration** | `npm run auth:test` | Password hashing (bcrypt), JWT tokens, session lifecycle, and route middleware (45 tests). |
+| **Development Identities** | `npm run identities:test` | CloudDesk personas, roles, wildcard tenants, and idempotent seeding verification (153 tests). |
+| **Central Policy Engine** | `npm run authz:test` | Default-deny rules, sensitivity clearance, group checks, and document filtering (69 tests). |
+| **Authorization Responses** | `npm run auth:responses:test` | Separation of unauthorized access from insufficient evidence, anti-enumeration, real-time revocation (39 tests). |
+| **Secure Vector Retrieval** | `npm run retrieval:secure:test` | Server-side candidate chunk exclusion before LLM context, defense-in-depth, parameter tampering resistance (42 tests). |
+| **Secure Document & Citation APIs** | `npm run docs:secure:test` | Listings, details, preview snippets, direct citation resolution, downloads, and anti-enumeration 404 parity (65 tests). |
+| **Master Security Suite** | `npm run test:security` | Comprehensive end-to-end security verification covering all 5 core security categories (59 tests). |
 
 ---
 
-## 8. Security Boundaries & Scope Notes
+## 8. Security Architecture & Phase 2 Capabilities
 
-### Foundation Scope
-AccessCore Foundation is a local development implementation designed to establish reliable end-to-end RAG workflows on synthetic data:
-- **Authentication & RBAC:** User session management and server-side document-level authorization are scheduled for Phase 2. Document sensitivity labels and tenant IDs are stored in metadata and validated in schemas, but strict multi-tenant authorization gates will be enforced in Phase 2.
-- **Customer Disclosure Policies:** `approved_summary_only` boundaries and redaction engines are scheduled for Phase 3.
-- **Hybrid Search:** Full-text BM25 + dense vector hybrid search and reranking are scheduled for Phase 4.
-- **Secrets Management:** No live credentials or production keys are present in the repository. All environment variables use local addresses (`localhost`, `127.0.0.1`).
+AccessCore Phase 2 enforces defense-in-depth authorization directly within the trusted backend layer:
+- **Server-Side Authorization Boundary:** Client-supplied roles, tenant scopes, and group lists in request bodies or query parameters are untrusted. The backend resolves caller identity authoritatively against PostgreSQL.
+- **Zero Unauthorized Retrieval:** Vector candidate queries in PostgreSQL filter out unauthorized tenants and non-cleared `restricted` documents before chunks leave the database.
+- **0ms LLM Bypass on Unauthorized Queries:** When a user queries a restricted document, the backend identifies unauthorized access, returns a generic response (`"I couldn't find sufficient information available to you to answer this question."`), and **never invokes the LLM** (0ms latency, 0 prompt tokens).
+- **Anti-Enumeration 404 Parity:** Unauthorized document, preview, citation, and download requests return an identical HTTP 404 `DOCUMENT_NOT_FOUND` as nonexistent documents, preventing enumeration attacks.
+- **Customer Quarantine:** Customer users are strictly isolated to their assigned customer tenant and public documents; customer users cannot download confidential tickets or inspect internal ingestion jobs.
+- **Real-Time Revocation:** Database permission changes take immediate effect on subsequent requests without requiring token reissuance or server restarts.
