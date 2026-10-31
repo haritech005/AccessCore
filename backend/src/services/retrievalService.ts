@@ -1,6 +1,8 @@
 import { query } from '../db';
 import { embeddingService } from './embeddingService';
+import { authorizationService } from './authorizationService';
 import { RetrievalQuery, RetrievedChunk } from '../types/rag';
+import { AuthenticatedUser, SensitivityLevel } from '../types/identity';
 import { AppError } from '../middleware/errorHandler';
 
 export interface RetrievalResult {
@@ -13,15 +15,20 @@ export interface RetrievalResult {
 
 export class RetrievalService {
   /**
-   * Retrieves the most semantically relevant document chunks using pgvector similarity search.
-   * - Embeds query using Ollama nomic-embed-text (768 dimensions).
-   * - Leverages PostgreSQL HNSW cosine distance index.
-   * - Excludes inactive, archived, or failed document versions.
-   * - Returns complete metadata needed for citations and authorization checks.
+   * Retrieves the most semantically relevant document chunks using pgvector similarity search
+   * while strictly enforcing server-side authorization boundaries before evidence reaches the LLM.
+   *
+   * Security Guarantees:
+   * 1. Inactive or suspended accounts cannot retrieve any knowledge.
+   * 2. Cross-tenant retrieval is strictly excluded at the SQL level.
+   * 3. Customer users are quarantined to their assigned customer tenant.
+   * 4. Restricted sensitivity requires explicit security clearance.
+   * 5. Top unfiltered match pre-check prevents fallback leakage.
+   * 6. Defense-in-depth: Each returned chunk is validated through authorizationService before leaving.
    */
   async retrieveChunks(options: RetrievalQuery): Promise<RetrievalResult> {
     const startTime = Date.now();
-    const { query: userQuery, top_k = 5, min_similarity = 0.0, tenant_scope, user_groups } = options;
+    const { query: userQuery, top_k = 5, min_similarity = 0.0, tenant_scope, user_groups, user } = options;
 
     if (!userQuery || typeof userQuery !== 'string' || userQuery.trim().length === 0) {
       throw new AppError('Retrieval query must be a non-empty string.', 400, 'INVALID_QUERY');
@@ -32,15 +39,43 @@ export class RetrievalService {
       throw new AppError('Retrieval query exceeds maximum allowed length of 2000 characters.', 400, 'QUERY_TOO_LONG');
     }
 
+    // 0. Account Status Guard: Inactive / suspended accounts cannot retrieve any knowledge
+    if (user && user.status !== 'active') {
+      return {
+        query: cleanQuery,
+        chunks: [],
+        total_retrieved: 0,
+        latency_ms: Date.now() - startTime,
+      };
+    }
+
     const effectiveTopK = Math.min(Math.max(1, top_k), 50);
+
+    // Resolve authoritative security scopes
+    let effectiveTenantScope: string[] | undefined = tenant_scope;
+    let effectiveUserGroups: string[] | undefined = user_groups;
+    let hasRestrictedClearance = false;
+
+    if (user) {
+      effectiveTenantScope = authorizationService.getEffectiveTenantScope(
+        user,
+        tenant_scope && tenant_scope.length > 0 ? tenant_scope[0] : undefined
+      );
+      effectiveUserGroups = user.groups;
+      hasRestrictedClearance = authorizationService.hasRestrictedClearance(user);
+    } else if (user_groups) {
+      hasRestrictedClearance =
+        user_groups.includes('grp_security_restricted') ||
+        user_groups.includes('grp_incident_review');
+    }
 
     // 1. Generate 768-dimensional query vector using local embedding model
     const queryEmbedding = await embeddingService.generateEmbedding(cleanQuery);
     const queryVectorLiteral = `[${queryEmbedding.join(',')}]`;
 
-    // 1b. Pre-check: If tenant_scope or user_groups are defined, check whether the primary matching
-    // indexed evidence (or an explicitly cited document ID) is blocked by the caller's authorization.
-    if ((tenant_scope && tenant_scope.length > 0) || (user_groups && user_groups.length > 0)) {
+    // 1b. Pre-check: Check whether the primary matching indexed evidence (or an explicitly cited document ID)
+    // is blocked by the caller's authorization. If blocked, short-circuit immediately without sending fallback chunks.
+    if ((effectiveTenantScope && effectiveTenantScope.length > 0) || (effectiveUserGroups && effectiveUserGroups.length > 0) || user) {
       const docIdMatches = [...cleanQuery.matchAll(/\b([A-Z]{2,5}-[0-9]{3,5})\b/g)].map((m) => m[1]);
 
       const topCheckParams: unknown[] = [queryVectorLiteral];
@@ -80,22 +115,32 @@ export class RetrievalService {
 
       if (topCheckRes.rows.length > 0) {
         const top = topCheckRes.rows[0];
-        const hasTenant =
-          top.tenant_id === 'global' ||
-          (tenant_scope && (tenant_scope.includes('*') || tenant_scope.includes(top.tenant_id)));
-        const hasGroup =
-          !user_groups ||
-          user_groups.length === 0 ||
-          (Array.isArray(top.allowed_groups) &&
-            (top.allowed_groups.includes('grp_public') ||
-              user_groups.some((g) => top.allowed_groups.includes(g))));
-        const hasClearance =
-          top.sensitivity !== 'restricted' ||
-          (user_groups &&
-            (user_groups.includes('grp_security_restricted') ||
-              user_groups.includes('grp_incident_review')));
 
-        if (!hasTenant || !hasGroup || !hasClearance) {
+        let isTopAllowed = false;
+        if (user) {
+          isTopAllowed = authorizationService.can(user, 'search:retrieval', {
+            type: 'chunk',
+            document_id: top.document_id,
+            tenant_id: top.tenant_id,
+            allowed_groups: Array.isArray(top.allowed_groups) ? top.allowed_groups : [],
+            sensitivity: (top.sensitivity as SensitivityLevel) || 'internal',
+          }).allowed;
+        } else {
+          const hasTenant =
+            top.tenant_id === 'global' ||
+            (effectiveTenantScope && (effectiveTenantScope.includes('*') || effectiveTenantScope.includes(top.tenant_id)));
+          const hasGroup =
+            !effectiveUserGroups ||
+            effectiveUserGroups.length === 0 ||
+            (Array.isArray(top.allowed_groups) &&
+              (top.allowed_groups.includes('grp_public') ||
+                effectiveUserGroups.some((g) => top.allowed_groups.includes(g))));
+          const hasClearance =
+            top.sensitivity !== 'restricted' || hasRestrictedClearance;
+          isTopAllowed = !!(hasTenant && hasGroup && hasClearance);
+        }
+
+        if (!isTopAllowed) {
           // The most relevant document for this question is blocked by authorization.
           // Do NOT return lower-ranked fallback chunks from other tenants to the LLM.
           return {
@@ -109,8 +154,7 @@ export class RetrievalService {
       }
     }
 
-    // 2. Build pgvector cosine similarity search query
-    // Cosine distance <=> range is [0, 2], cosine similarity is 1 - distance
+    // 2. Build pgvector cosine similarity search query with authoritative server-side filtering
     let sql = `
       SELECT 
         c.id,
@@ -132,31 +176,28 @@ export class RetrievalService {
 
     const params: unknown[] = [queryVectorLiteral];
 
-    // Optional minimum similarity threshold
+    // Minimum similarity threshold
     if (min_similarity > 0) {
       params.push(min_similarity);
       sql += ` AND (1 - (c.embedding <=> $1::vector)) >= $${params.length}`;
     }
 
-    // Optional tenant scope filter (e.g. global + user's tenant)
-    if (tenant_scope && tenant_scope.length > 0) {
-      params.push(tenant_scope);
+    // Tenant scope filter (global + user's authorized tenant scope)
+    if (user && user.has_wildcard_tenant && (!tenant_scope || tenant_scope.length === 0)) {
+      // Wildcard user with no specific tenant requested searches all customer tenants + global
+    } else if (effectiveTenantScope && effectiveTenantScope.length > 0) {
+      params.push(effectiveTenantScope);
       sql += ` AND (c.metadata->>'tenant_id' = ANY($${params.length}) OR c.metadata->>'tenant_id' = 'global')`;
     }
 
-    // Optional user groups filter
-    if (user_groups && user_groups.length > 0) {
-      params.push(user_groups);
+    // User groups filter
+    if (effectiveUserGroups && effectiveUserGroups.length > 0) {
+      params.push(effectiveUserGroups);
       sql += ` AND (c.metadata->'allowed_groups' ?| $${params.length} OR c.metadata->'allowed_groups' ? 'grp_public')`;
     }
 
     // Restricted sensitivity clearance check:
     // If caller does not belong to security restricted clearance groups, strictly exclude restricted sensitivity chunks
-    const hasRestrictedClearance =
-      user_groups &&
-      (user_groups.includes('grp_security_restricted') ||
-        user_groups.includes('grp_incident_review'));
-
     if (!hasRestrictedClearance) {
       sql += ` AND (c.metadata->>'sensitivity' IS DISTINCT FROM 'restricted')`;
     }
@@ -167,7 +208,7 @@ export class RetrievalService {
       LIMIT $${params.length}
     `;
 
-    // 3. Execute query
+    // 3. Execute vector search in PostgreSQL
     const res = await query<{
       id: string;
       document_id: string;
@@ -208,31 +249,42 @@ export class RetrievalService {
       };
     });
 
+    // 4. Defense-in-depth: Authoritative post-retrieval verification before leaving retrieval service
+    let verifiedChunks = retrievedChunks;
+    if (user) {
+      verifiedChunks = retrievedChunks.filter((chunk) => {
+        return authorizationService.can(user, 'search:retrieval', {
+          type: 'chunk',
+          document_id: chunk.document_id,
+          tenant_id: chunk.metadata.tenant_id,
+          allowed_groups: chunk.metadata.allowed_groups,
+          sensitivity: chunk.metadata.sensitivity,
+          is_active: chunk.is_active,
+        }).allowed;
+      });
+    }
+
     const latencyMs = Date.now() - startTime;
 
     return {
       query: cleanQuery,
-      chunks: retrievedChunks,
-      total_retrieved: retrievedChunks.length,
+      chunks: verifiedChunks,
+      total_retrieved: verifiedChunks.length,
       latency_ms: latencyMs,
     };
   }
 
   /**
-   * Evaluates whether there is indexed evidence matching the query that was filtered out
-   * exclusively because of authorization barriers (tenant isolation, group permissions,
-   * or restricted sensitivity clearance).
-   *
-   * Crucial: This method strictly returns a boolean and does not expose chunk contents,
-   * document IDs, titles, or metadata to callers.
+   * Helper check: Determines if matching indexed evidence exists in PostgreSQL that is blocked by authorization.
    */
   async hasBlockedMatchingEvidence(options: {
     query: string;
     min_similarity?: number;
     tenant_scope?: string[];
     user_groups?: string[];
+    user?: AuthenticatedUser;
   }): Promise<boolean> {
-    const { query: userQuery, min_similarity = 0.35, tenant_scope = [], user_groups = [] } = options;
+    const { query: userQuery, min_similarity = 0.35, tenant_scope = [], user_groups = [], user } = options;
 
     if (!userQuery || userQuery.trim().length === 0) {
       return false;
@@ -245,9 +297,19 @@ export class RetrievalService {
     // 2. Extract any document IDs directly mentioned in the question (e.g., TKT-10421, PDOC-0001)
     const docIdMatches = [...userQuery.matchAll(/\b([A-Z]{2,5}-[0-9]{3,5})\b/g)].map((m) => m[1]);
 
-    const hasRestrictedClearance =
-      user_groups.includes('grp_security_restricted') ||
-      user_groups.includes('grp_incident_review');
+    let effectiveTenantScope = tenant_scope;
+    let effectiveUserGroups = user_groups;
+    let hasRestrictedClearance = false;
+
+    if (user) {
+      effectiveTenantScope = authorizationService.getEffectiveTenantScope(user);
+      effectiveUserGroups = user.groups;
+      hasRestrictedClearance = authorizationService.hasRestrictedClearance(user);
+    } else {
+      hasRestrictedClearance =
+        user_groups.includes('grp_security_restricted') ||
+        user_groups.includes('grp_incident_review');
+    }
 
     // 3. Query PostgreSQL for matching chunks that are EXCLUDED by the user's authorization bounds
     const params: unknown[] = [queryVectorLiteral, min_similarity];
@@ -258,10 +320,10 @@ export class RetrievalService {
       docIdFilter = `OR d.document_id = ANY($${params.length}::text[])`;
     }
 
-    params.push(tenant_scope);
+    params.push(effectiveTenantScope);
     const tenantParamIdx = params.length;
 
-    params.push(user_groups);
+    params.push(effectiveUserGroups);
     const groupsParamIdx = params.length;
 
     params.push(hasRestrictedClearance);

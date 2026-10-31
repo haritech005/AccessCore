@@ -64,6 +64,7 @@ router.post(
         min_similarity: typeof min_similarity === 'number' ? min_similarity : undefined,
         tenant_scope: effectiveTenantScope,
         user_groups: effectiveUserGroups,
+        user: req.user,
       });
 
       res.status(200).json({
@@ -98,6 +99,7 @@ router.post(
         min_similarity: typeof min_similarity === 'number' ? min_similarity : undefined,
         tenant_scope: effectiveTenantScope,
         user_groups: effectiveUserGroups,
+        user: req.user,
       });
 
       res.status(200).json({

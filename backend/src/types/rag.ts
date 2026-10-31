@@ -1,4 +1,5 @@
 import { DocumentChunk, Sensitivity, DisclosurePolicy } from './document';
+import { AuthenticatedUser } from './identity';
 
 export interface RetrievalQuery {
   query: string;
@@ -6,6 +7,7 @@ export interface RetrievalQuery {
   min_similarity?: number;
   tenant_scope?: string[];
   user_groups?: string[];
+  user?: AuthenticatedUser;
 }
 
 export interface RetrievedChunk extends DocumentChunk {

@@ -3,7 +3,9 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { config } from '../config';
 import { retrievalService } from './retrievalService';
+import { authorizationService } from './authorizationService';
 import { Citation, RAGAnswerResponse, RetrievedChunk } from '../types/rag';
+import { AuthenticatedUser } from '../types/identity';
 import { AppError } from '../middleware/errorHandler';
 
 export interface RAGQueryOptions {
@@ -12,6 +14,7 @@ export interface RAGQueryOptions {
   min_similarity?: number;
   tenant_scope?: string[];
   user_groups?: string[];
+  user?: AuthenticatedUser;
   model?: string;
 }
 
@@ -184,7 +187,7 @@ ${chunk.content}`;
    */
   async answerQuestion(options: RAGQueryOptions): Promise<RAGAnswerResponse> {
     const totalStart = Date.now();
-    const { question, top_k = 4, min_similarity = 0.40, tenant_scope, user_groups, model } = options;
+    const { question, top_k = 4, min_similarity = 0.40, tenant_scope, user_groups, user, model } = options;
 
     if (!question || typeof question !== 'string' || question.trim().length === 0) {
       throw new AppError('Question must be a non-empty string.', 400, 'INVALID_QUESTION');
@@ -192,7 +195,7 @@ ${chunk.content}`;
 
     const cleanQuestion = question.trim();
 
-    // 1. Semantic Vector Retrieval
+    // 1. Semantic Vector Retrieval (with server-side authorization enforcement)
     const retrievalStart = Date.now();
     const retrievalResult = await retrievalService.retrieveChunks({
       query: cleanQuestion,
@@ -200,10 +203,25 @@ ${chunk.content}`;
       min_similarity,
       tenant_scope,
       user_groups,
+      user,
     });
     const retrievalLatency = Date.now() - retrievalStart;
 
-    const retrievedChunks = retrievalResult.chunks;
+    let retrievedChunks = retrievalResult.chunks;
+
+    // Defense-in-depth: Secondary security validation on all retrieved chunks before LLM prompt assembly
+    if (user && retrievedChunks.length > 0) {
+      retrievedChunks = retrievedChunks.filter((chunk) => {
+        return authorizationService.can(user, 'search:retrieval', {
+          type: 'chunk',
+          document_id: chunk.document_id,
+          tenant_id: chunk.metadata.tenant_id,
+          allowed_groups: chunk.metadata.allowed_groups,
+          sensitivity: chunk.metadata.sensitivity,
+          is_active: chunk.is_active,
+        }).allowed;
+      });
+    }
 
     // 2. Early return for zero or low-similarity retrieval results
     if (retrievedChunks.length === 0) {
@@ -216,6 +234,7 @@ ${chunk.content}`;
           min_similarity,
           tenant_scope,
           user_groups,
+          user,
         }));
 
       if (isRestricted) {

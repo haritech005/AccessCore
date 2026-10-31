@@ -65,6 +65,7 @@ router.post(
         min_similarity: typeof min_similarity === 'number' ? min_similarity : undefined,
         tenant_scope: effectiveTenantScope,
         user_groups: effectiveUserGroups,
+        user: req.user,
         model: typeof model === 'string' ? model : undefined,
       });
 
@@ -100,6 +101,7 @@ router.post(
         min_similarity: typeof min_similarity === 'number' ? min_similarity : undefined,
         tenant_scope: effectiveTenantScope,
         user_groups: effectiveUserGroups,
+        user: req.user,
         model: typeof model === 'string' ? model : undefined,
       });
 
