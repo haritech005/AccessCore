@@ -1,9 +1,10 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ingestionService } from '../services/ingestionService';
+import { authorizationService } from '../services/authorizationService';
 import { DocumentMetadata } from '../types/document';
 import { AppError } from '../middleware/errorHandler';
 import { requireAuth } from '../middleware/auth';
-import { evaluateDocumentAccess, SensitivityLevel } from '../types/identity';
+import { SensitivityLevel } from '../types/identity';
 
 const router = Router();
 
@@ -21,7 +22,16 @@ router.post(
   '/documents/ingest',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
+      const user = req.user!;
       const { filename, content, override_metadata, is_base64 } = req.body;
+
+      const ingestAuthz = authorizationService.canIngest(
+        user,
+        override_metadata?.tenant_id as string | undefined
+      );
+      if (!ingestAuthz.allowed) {
+        throw new AppError(ingestAuthz.reason || 'Ingestion not permitted.', 403, 'FORBIDDEN');
+      }
 
       if (!filename || typeof filename !== 'string') {
         throw new AppError('Field \'filename\' is required and must be a string.', 400, 'INVALID_INPUT');
@@ -72,13 +82,13 @@ router.get(
 
       const documents = await ingestionService.listDocuments({ tenantId, sensitivity });
 
-      // Authoritatively filter documents against caller's identity context
+      // Authoritatively filter documents against caller's identity context via central authorization service
       const authorizedDocuments = documents.filter((doc) => {
-        return evaluateDocumentAccess(user, {
+        return authorizationService.authorizeDocument(user, {
           tenant_id: (doc.metadata?.tenant_id as string) || 'global',
           allowed_groups: (doc.metadata?.allowed_groups as string[]) || [],
           sensitivity: (doc.metadata?.sensitivity as SensitivityLevel) || 'internal',
-        }).allowed;
+        }, 'read:document').allowed;
       });
 
       res.status(200).json({
@@ -133,11 +143,11 @@ router.get(
         throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
       }
 
-      const access = evaluateDocumentAccess(user, {
+      const access = authorizationService.authorizeDocument(user, {
         tenant_id: (details.document.metadata?.tenant_id as string) || 'global',
         allowed_groups: (details.document.metadata?.allowed_groups as string[]) || [],
         sensitivity: (details.document.metadata?.sensitivity as SensitivityLevel) || 'internal',
-      });
+      }, 'read:document');
 
       if (!access.allowed) {
         // Do not expose document existence to unauthorized callers
@@ -170,11 +180,11 @@ router.get(
         throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
       }
 
-      const access = evaluateDocumentAccess(user, {
+      const access = authorizationService.authorizeDocument(user, {
         tenant_id: (details.document.metadata?.tenant_id as string) || 'global',
         allowed_groups: (details.document.metadata?.allowed_groups as string[]) || [],
         sensitivity: (details.document.metadata?.sensitivity as SensitivityLevel) || 'internal',
-      });
+      }, 'preview:document');
 
       if (!access.allowed) {
         throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
@@ -211,11 +221,11 @@ router.get(
         throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
       }
 
-      const access = evaluateDocumentAccess(user, {
+      const access = authorizationService.authorizeDocument(user, {
         tenant_id: (details.document.metadata?.tenant_id as string) || 'global',
         allowed_groups: (details.document.metadata?.allowed_groups as string[]) || [],
         sensitivity: (details.document.metadata?.sensitivity as SensitivityLevel) || 'internal',
-      });
+      }, 'download:document');
 
       if (!access.allowed) {
         throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');

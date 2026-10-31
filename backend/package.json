@@ -20,7 +20,8 @@
     "auth:test": "tsx src/services/testAuth.ts",
     "db:seed:identities": "tsx src/db/seedIdentities.ts",
     "identities:test": "tsx src/services/testIdentitiesSeed.ts",
-    "auth:responses:test": "tsx src/services/testAuthorizationResponses.ts"
+    "auth:responses:test": "tsx src/services/testAuthorizationResponses.ts",
+    "authz:test": "tsx src/services/testAuthorizationService.ts"
   },
   "keywords": [
     "accesscore",

@@ -147,3 +147,17 @@ export interface IngestionResult {
   error_message?: string;
   completed_at: string;
 }
+
+export interface DocumentRecord {
+  id: string;
+  document_id: string;
+  title: string;
+  filename: string;
+  format: string;
+  current_version: number;
+  status: string;
+  error_message?: string;
+  metadata?: Partial<DocumentMetadata> & Record<string, unknown>;
+  created_at: Date;
+  updated_at: Date;
+}
