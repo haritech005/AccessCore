@@ -8,12 +8,16 @@ import {
   DocumentRecord,
   Citation,
 } from '@/lib/api';
+import { getCurrentUser, logoutUser, AuthUserProfile } from '@/lib/auth';
 import { Header } from '@/components/Header';
 import { ChatArea, ChatMessage } from '@/components/ChatArea';
 import { CitationDrawer } from '@/components/CitationDrawer';
 import { KnowledgeDrawer } from '@/components/KnowledgeDrawer';
+import { LoginModal } from '@/components/LoginModal';
 
 export default function Home() {
+  const [currentUser, setCurrentUser] = useState<AuthUserProfile | null>(null);
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState<boolean>(false);
   const [isBackendConnected, setIsBackendConnected] = useState<boolean | null>(null);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -27,14 +31,19 @@ export default function Home() {
   const [isKnowledgeDrawerOpen, setIsKnowledgeDrawerOpen] = useState<boolean>(false);
   const [knowledgeDrawerTab, setKnowledgeDrawerTab] = useState<'upload' | 'library'>('library');
 
-  // Initial load: verify backend health & load indexed documents
+  // Initial load: verify backend health & check current user session
   const loadInitialData = useCallback(async () => {
     const healthResult = await fetchHealthStatus();
     setIsBackendConnected(healthResult.error === null && healthResult.data?.status === 'healthy');
 
-    const docsResult = await fetchDocuments();
-    if (docsResult.data) {
-      setDocuments(docsResult.data);
+    const user = await getCurrentUser();
+    setCurrentUser(user);
+
+    if (user) {
+      const docsResult = await fetchDocuments();
+      if (docsResult.data) {
+        setDocuments(docsResult.data);
+      }
     }
   }, []);
 
@@ -42,9 +51,28 @@ export default function Home() {
     loadInitialData();
   }, [loadInitialData]);
 
+  const handleLoginSuccess = async (user: AuthUserProfile) => {
+    setCurrentUser(user);
+    const docsResult = await fetchDocuments();
+    if (docsResult.data) {
+      setDocuments(docsResult.data);
+    }
+  };
+
+  const handleLogout = async () => {
+    await logoutUser();
+    setCurrentUser(null);
+    setDocuments([]);
+  };
+
   // Handle sending a chat message to the RAG pipeline
   const handleSendMessage = async (question: string) => {
     if (!question.trim() || isLoading) return;
+
+    if (!currentUser) {
+      setIsLoginModalOpen(true);
+      return;
+    }
 
     const userMessage: ChatMessage = {
       id: `user-${Date.now()}`,
@@ -120,7 +148,10 @@ export default function Home() {
       <Header
         isBackendConnected={isBackendConnected}
         documentCount={documents.length}
+        currentUser={currentUser}
         onOpenKnowledgeDrawer={handleOpenKnowledgeDrawer}
+        onOpenLoginModal={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
       />
 
       {/* Main Conversational Area */}
@@ -128,12 +159,21 @@ export default function Home() {
         <ChatArea
           messages={messages}
           isLoading={isLoading}
+          currentUser={currentUser}
           onSendMessage={handleSendMessage}
           onOpenCitation={handleOpenCitation}
           onOpenUpload={() => handleOpenKnowledgeDrawer('upload')}
           onClearChat={() => setMessages([])}
+          onOpenLogin={() => setIsLoginModalOpen(true)}
         />
       </div>
+
+      {/* Employee Login Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={handleLoginSuccess}
+      />
 
       {/* Slide-over Citation Provenance Drawer */}
       <CitationDrawer

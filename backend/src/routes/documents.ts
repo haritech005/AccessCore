@@ -2,8 +2,14 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { ingestionService } from '../services/ingestionService';
 import { DocumentMetadata } from '../types/document';
 import { AppError } from '../middleware/errorHandler';
+import { requireAuth } from '../middleware/auth';
 
 const router = Router();
+
+/**
+ * All document management endpoints require an authenticated, active session.
+ */
+router.use('/documents', requireAuth);
 
 /**
  * POST /api/documents/ingest

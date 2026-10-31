@@ -105,6 +105,17 @@ export interface ApiResponse<T> {
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 
+import { getStoredToken } from './auth';
+
+function getAuthHeaders(token?: string): Record<string, string> {
+  const effectiveToken = token || getStoredToken();
+  const headers: Record<string, string> = {};
+  if (effectiveToken) {
+    headers['Authorization'] = `Bearer ${effectiveToken}`;
+  }
+  return headers;
+}
+
 /**
  * Health check endpoint: verifies backend, database, and Ollama connectivity.
  */
@@ -166,18 +177,23 @@ export async function askQuestion(
     min_similarity?: number;
     tenant_scope?: string[];
     user_groups?: string[];
+    token?: string;
   }
 ): Promise<{
   data: RAGAnswerResponse | null;
   error: string | null;
 }> {
   try {
+    const authHeaders = getAuthHeaders(options?.token);
+
     const res = await fetch(`${API_BASE_URL}/api/chat`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        ...authHeaders,
       },
+      credentials: 'include',
       body: JSON.stringify({
         question,
         top_k: options?.top_k ?? 5,
@@ -224,6 +240,7 @@ export async function askQuestion(
 export async function fetchDocuments(params?: {
   tenant_id?: string;
   sensitivity?: string;
+  token?: string;
 }): Promise<{
   data: DocumentRecord[] | null;
   error: string | null;
@@ -233,9 +250,15 @@ export async function fetchDocuments(params?: {
     if (params?.tenant_id) url.searchParams.set('tenant_id', params.tenant_id);
     if (params?.sensitivity) url.searchParams.set('sensitivity', params.sensitivity);
 
+    const authHeaders = getAuthHeaders(params?.token);
+
     const res = await fetch(url.toString(), {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: {
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      credentials: 'include',
       cache: 'no-store',
     });
 
@@ -280,20 +303,24 @@ export function fileToBase64(file: File): Promise<string> {
  */
 export async function uploadDocument(
   file: File,
-  overrideMetadata?: Record<string, unknown>
+  overrideMetadata?: Record<string, unknown>,
+  token?: string
 ): Promise<{
   data: IngestDocumentOutput | null;
   error: string | null;
 }> {
   try {
     const base64Content = await fileToBase64(file);
+    const authHeaders = getAuthHeaders(token);
 
     const res = await fetch(`${API_BASE_URL}/api/documents/ingest`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Accept: 'application/json',
+        ...authHeaders,
       },
+      credentials: 'include',
       body: JSON.stringify({
         filename: file.name,
         content: base64Content,

@@ -2,6 +2,7 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Citation, RAGAnswerResponse } from '@/lib/api';
+import { AuthUserProfile } from '@/lib/auth';
 
 export interface ChatMessage {
   id: string;
@@ -21,19 +22,23 @@ export interface ChatMessage {
 interface ChatAreaProps {
   messages: ChatMessage[];
   isLoading: boolean;
+  currentUser?: AuthUserProfile | null;
   onSendMessage: (question: string) => Promise<void>;
   onOpenCitation: (citation: Citation, allCitations: Citation[]) => void;
   onOpenUpload: () => void;
   onClearChat: () => void;
+  onOpenLogin?: () => void;
 }
 
 export function ChatArea({
   messages,
   isLoading,
+  currentUser,
   onSendMessage,
   onOpenCitation,
   onOpenUpload,
   onClearChat,
+  onOpenLogin,
 }: ChatAreaProps) {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -49,6 +54,10 @@ export function ChatArea({
 
   const handleSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+    if (!currentUser && onOpenLogin) {
+      onOpenLogin();
+      return;
+    }
     if (!input.trim() || isLoading) return;
     const q = input.trim();
     setInput('');
@@ -477,6 +486,46 @@ export function ChatArea({
           background: 'linear-gradient(to top, var(--bg-primary) 85%, transparent 100%)',
         }}
       >
+        {!currentUser && (
+          <div
+            style={{
+              marginBottom: '10px',
+              padding: '10px 16px',
+              borderRadius: 'var(--radius-lg)',
+              backgroundColor: 'rgba(99, 102, 241, 0.12)',
+              border: '1px solid rgba(99, 102, 241, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '0.825rem', color: '#c7d2fe' }}>
+              <span>🔒</span>
+              <span>Authentication required. Please sign in as an employee to query the knowledge base and retrieve permitted evidence.</span>
+            </div>
+            {onOpenLogin && (
+              <button
+                type="button"
+                onClick={onOpenLogin}
+                style={{
+                  padding: '5px 12px',
+                  borderRadius: '6px',
+                  backgroundColor: '#6366f1',
+                  color: '#ffffff',
+                  fontSize: '0.78rem',
+                  fontWeight: 600,
+                  border: 'none',
+                  cursor: 'pointer',
+                  flexShrink: 0,
+                }}
+              >
+                Sign In
+              </button>
+            )}
+          </div>
+        )}
+
         <form
           onSubmit={handleSubmit}
           style={{
