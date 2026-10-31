@@ -505,6 +505,98 @@ export class IngestionService {
 
     return res.rows[0] || null;
   }
+
+  /**
+   * Get a specific active chunk for a document by logical document ID and chunk index.
+   */
+  async getDocumentChunk(documentId: string, chunkIndex: number): Promise<{
+    chunk: {
+      id: string;
+      chunk_index: number;
+      content: string;
+      metadata: Record<string, unknown>;
+      is_active: boolean;
+    };
+    document: DocumentRecord;
+  } | null> {
+    const res = await query<{
+      chunk_id: string;
+      chunk_index: number;
+      chunk_content: string;
+      chunk_metadata: Record<string, unknown>;
+      chunk_is_active: boolean;
+      doc_id: string;
+      doc_document_id: string;
+      doc_title: string;
+      doc_filename: string;
+      doc_format: string;
+      doc_current_version: number;
+      doc_status: string;
+      doc_error_message: string | null;
+      doc_metadata: Record<string, unknown>;
+      doc_created_at: Date;
+      doc_updated_at: Date;
+    }>(
+      `SELECT 
+         c.id as chunk_id,
+         c.chunk_index,
+         c.content as chunk_content,
+         c.metadata as chunk_metadata,
+         c.is_active as chunk_is_active,
+         d.id as doc_id,
+         d.document_id as doc_document_id,
+         d.title as doc_title,
+         d.filename as doc_filename,
+         d.format as doc_format,
+         d.current_version as doc_current_version,
+         d.status as doc_status,
+         d.error_message as doc_error_message,
+         d.metadata as doc_metadata,
+         d.created_at as doc_created_at,
+         d.updated_at as doc_updated_at
+       FROM document_chunks c
+       JOIN documents d ON d.id = c.document_id
+       WHERE d.document_id = $1 
+         AND c.chunk_index = $2 
+         AND c.is_active = true 
+         AND d.status = 'completed'`,
+      [documentId, chunkIndex]
+    );
+
+    if (res.rows.length === 0) {
+      return null;
+    }
+
+    const row = res.rows[0];
+    return {
+      chunk: {
+        id: row.chunk_id,
+        chunk_index: row.chunk_index,
+        content: row.chunk_content,
+        metadata: row.chunk_metadata,
+        is_active: row.chunk_is_active,
+      },
+      document: {
+        id: row.doc_id,
+        document_id: row.doc_document_id,
+        title: row.doc_title,
+        filename: row.doc_filename,
+        format: row.doc_format,
+        current_version: row.doc_current_version,
+        status: row.doc_status,
+        error_message: row.doc_error_message || null,
+        metadata: row.doc_metadata as DocumentMetadata,
+        created_at:
+          row.doc_created_at instanceof Date
+            ? row.doc_created_at.toISOString()
+            : String(row.doc_created_at),
+        updated_at:
+          row.doc_updated_at instanceof Date
+            ? row.doc_updated_at.toISOString()
+            : String(row.doc_updated_at),
+      },
+    };
+  }
 }
 
 export const ingestionService = new IngestionService();

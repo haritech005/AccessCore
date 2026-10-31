@@ -50,6 +50,7 @@ export interface CitationResource {
   tenant_id: string;
   sensitivity: SensitivityLevel;
   allowed_groups?: string[];
+  disclosure_policy?: string;
 }
 
 export interface TenantResource {
@@ -454,13 +455,34 @@ export class AuthorizationService {
 
   /**
    * Filters an array of documents against caller's authoritative permissions.
+   * Supports both DocumentAccessTarget and document records containing a metadata object.
    */
-  filterPermittedDocuments<T extends DocumentAccessTarget>(
+  filterPermittedDocuments<T extends { metadata?: Record<string, unknown> } | DocumentAccessTarget>(
     user: AuthenticatedUser,
     documents: T[],
     action: AuthzAction = 'read:document'
   ): T[] {
-    return documents.filter((doc) => this.authorizeDocument(user, doc, action).allowed);
+    if (user.status !== 'active') return [];
+
+    return documents.filter((doc) => {
+      if ('tenant_id' in doc && 'allowed_groups' in doc) {
+        return this.authorizeDocument(user, doc as DocumentAccessTarget, action).allowed;
+      }
+      const meta = ((doc as any).metadata || {}) as Record<string, unknown>;
+      const tenantId = (meta.tenant_id as string) || 'global';
+      const allowedGroups =
+        (meta.allowed_groups as string[]) || (meta.authorized_groups as string[]) || [];
+      const sensitivity = (meta.sensitivity as SensitivityLevel) || 'internal';
+      return this.authorizeDocument(
+        user,
+        {
+          tenant_id: tenantId,
+          allowed_groups: allowedGroups,
+          sensitivity,
+        },
+        action
+      ).allowed;
+    });
   }
 }
 
