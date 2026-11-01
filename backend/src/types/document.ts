@@ -22,6 +22,7 @@ export type OwnerTeam = z.infer<typeof OwnerTeamEnum>;
 
 export const SensitivityEnum = z.enum([
   'public',
+  'customer_shareable',
   'internal',
   'confidential',
   'restricted',
@@ -30,8 +31,10 @@ export type Sensitivity = z.infer<typeof SensitivityEnum>;
 
 export const DisclosurePolicyEnum = z.enum([
   'customer_shareable',
+  'direct',
   'internal_only',
   'approved_summary_only',
+  'restricted',
 ]);
 export type DisclosurePolicy = z.infer<typeof DisclosurePolicyEnum>;
 
@@ -77,12 +80,16 @@ export const DocumentMetadataSchema = z
     (data) => {
       // Blueprint Section 6.3 - Policy validation rules
       if (data.sensitivity === 'public') {
-        return data.disclosure_policy === 'customer_shareable';
+        return (
+          data.disclosure_policy === 'customer_shareable' ||
+          data.disclosure_policy === 'direct'
+        );
       }
       if (data.sensitivity === 'confidential' || data.sensitivity === 'restricted') {
         return (
           data.disclosure_policy === 'internal_only' ||
-          data.disclosure_policy === 'approved_summary_only'
+          data.disclosure_policy === 'approved_summary_only' ||
+          data.disclosure_policy === 'restricted'
         );
       }
       return true; // internal can be any

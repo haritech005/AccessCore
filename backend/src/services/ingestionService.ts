@@ -352,7 +352,51 @@ export class IngestionService {
           ]
         );
 
-        // 6f. Mark ingestion job completed
+        // 6f. Sync document_permissions table for Phase 2 & Phase 3 authorization and disclosure
+        const meta = parsed.metadata;
+        await client.query(
+          `INSERT INTO document_permissions (
+            document_id, tenant_id, allowed_groups, sensitivity, disclosure_policy, is_active
+          ) VALUES ($1, $2, $3, $4, $5, true)
+          ON CONFLICT (document_id) DO UPDATE SET
+            tenant_id = EXCLUDED.tenant_id,
+            allowed_groups = EXCLUDED.allowed_groups,
+            sensitivity = EXCLUDED.sensitivity,
+            disclosure_policy = EXCLUDED.disclosure_policy,
+            is_active = true,
+            updated_at = NOW()`,
+          [
+            docUuid,
+            meta.tenant_id || 'global',
+            meta.allowed_groups || ['grp_all_employees'],
+            meta.sensitivity || 'internal',
+            meta.disclosure_policy || 'internal_only',
+          ]
+        );
+
+        // 6g. If parsed raw data contains an approved summary, record it in approved_summaries
+        const rawContent = (parsed.raw_data?.content as Record<string, unknown>) || {};
+        const approvedSummaryText =
+          typeof rawContent.approved_summary === 'string'
+            ? rawContent.approved_summary
+            : null;
+
+        if (approvedSummaryText && meta.disclosure_policy === 'approved_summary_only') {
+          await client.query(
+            `INSERT INTO approved_summaries (
+              document_id, version_id, audience, summary_text, status, approved_at
+            ) VALUES ($1, $2, 'customer', $3, 'approved', NOW())
+            ON CONFLICT (document_id, audience) DO UPDATE SET
+              version_id = EXCLUDED.version_id,
+              summary_text = EXCLUDED.summary_text,
+              status = 'approved',
+              approved_at = NOW(),
+              updated_at = NOW()`,
+            [docUuid, versionUuid, approvedSummaryText]
+          );
+        }
+
+        // 6h. Mark ingestion job completed
         await client.query(
           `UPDATE ingestion_jobs 
            SET status = 'completed', completed_at = NOW() 

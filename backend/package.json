@@ -24,7 +24,9 @@
     "authz:test": "tsx src/services/testAuthorizationService.ts",
     "retrieval:secure:test": "tsx src/services/testSecureRetrieval.ts",
     "docs:secure:test": "tsx src/services/testSecureDocumentCitationApis.ts",
-    "test:security": "tsx src/services/testSecuritySuite.ts"
+    "test:security": "tsx src/services/testSecuritySuite.ts",
+    "db:seed:policies": "tsx src/db/seedDisclosurePolicies.ts",
+    "policy:schema:test": "tsx src/services/testPolicySchema.ts"
   },
   "keywords": [
     "accesscore",

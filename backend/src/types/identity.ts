@@ -18,7 +18,12 @@ export type UserType = 'employee' | 'customer_user';
 
 export type UserStatus = 'active' | 'inactive' | 'suspended';
 
-export type SensitivityLevel = 'public' | 'internal' | 'confidential' | 'restricted';
+export type SensitivityLevel =
+  | 'public'
+  | 'customer_shareable'
+  | 'internal'
+  | 'confidential'
+  | 'restricted';
 
 export interface TenantRecord {
   id: string; // e.g. 'global', 'ten_brightwave', 'ten_harborpine', 'ten_lumenfield'
@@ -52,6 +57,7 @@ export interface DocumentPermissionRecord {
   tenant_id: string;
   allowed_groups: string[];
   sensitivity: SensitivityLevel;
+  disclosure_policy: string;
   is_active: boolean;
   created_at: Date;
   updated_at: Date;
