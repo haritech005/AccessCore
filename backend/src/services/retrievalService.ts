@@ -57,10 +57,15 @@ export class RetrievalService {
     let hasRestrictedClearance = false;
 
     if (user) {
-      effectiveTenantScope = authorizationService.getEffectiveTenantScope(
-        user,
-        tenant_scope && tenant_scope.length > 0 ? tenant_scope[0] : undefined
-      );
+      if (Array.isArray(tenant_scope) && tenant_scope.length === 1) {
+        effectiveTenantScope = authorizationService.getEffectiveTenantScope(user, tenant_scope[0]);
+      } else if (Array.isArray(tenant_scope) && tenant_scope.length > 1) {
+        effectiveTenantScope = user.has_wildcard_tenant
+          ? tenant_scope
+          : user.tenant_scope.filter((t) => tenant_scope.includes(t));
+      } else {
+        effectiveTenantScope = user.tenant_scope;
+      }
       effectiveUserGroups = user.groups;
       hasRestrictedClearance = authorizationService.hasRestrictedClearance(user);
     } else if (user_groups) {
@@ -78,14 +83,62 @@ export class RetrievalService {
     if ((effectiveTenantScope && effectiveTenantScope.length > 0) || (effectiveUserGroups && effectiveUserGroups.length > 0) || user) {
       const docIdMatches = [...cleanQuery.matchAll(/\b([A-Z]{2,5}-[0-9]{3,5})\b/g)].map((m) => m[1]);
 
-      const topCheckParams: unknown[] = [queryVectorLiteral];
-      let docIdClause = '';
+      // If explicit document IDs are requested in query, check whether ANY of those cited documents is unauthorized
       if (docIdMatches.length > 0) {
-        topCheckParams.push(docIdMatches);
-        docIdClause = `OR d.document_id = ANY($${topCheckParams.length}::text[])`;
-      }
-      topCheckParams.push(min_similarity > 0 ? min_similarity : 0.35);
+        const citedDocsRes = await query<{
+          document_id: string;
+          tenant_id: string;
+          allowed_groups: string[];
+          sensitivity: string;
+        }>(
+          `SELECT DISTINCT d.document_id, c.metadata->>'tenant_id' as tenant_id, c.metadata->'allowed_groups' as allowed_groups, c.metadata->>'sensitivity' as sensitivity
+           FROM document_chunks c
+           JOIN documents d ON c.document_id = d.id
+           JOIN document_versions v ON c.version_id = v.id
+           WHERE c.is_active = true AND d.status = 'completed' AND v.status = 'active'
+             AND d.document_id = ANY($1::text[])`,
+          [docIdMatches]
+        );
 
+        for (const citedDoc of citedDocsRes.rows) {
+          let isDocAllowed = false;
+          if (user) {
+            isDocAllowed = authorizationService.can(user, 'search:retrieval', {
+              type: 'chunk',
+              document_id: citedDoc.document_id,
+              tenant_id: citedDoc.tenant_id,
+              allowed_groups: Array.isArray(citedDoc.allowed_groups) ? citedDoc.allowed_groups : [],
+              sensitivity: (citedDoc.sensitivity as SensitivityLevel) || 'internal',
+            }).allowed;
+          } else {
+            const hasTenant =
+              citedDoc.tenant_id === 'global' ||
+              (effectiveTenantScope && (effectiveTenantScope.includes('*') || effectiveTenantScope.includes(citedDoc.tenant_id)));
+            const hasGroup =
+              !effectiveUserGroups ||
+              effectiveUserGroups.length === 0 ||
+              (Array.isArray(citedDoc.allowed_groups) &&
+                (citedDoc.allowed_groups.includes('grp_public') ||
+                  effectiveUserGroups.some((g) => citedDoc.allowed_groups.includes(g))));
+            const hasClearance =
+              citedDoc.sensitivity !== 'restricted' || hasRestrictedClearance;
+            isDocAllowed = !!(hasTenant && hasGroup && hasClearance);
+          }
+
+          if (!isDocAllowed) {
+            return {
+              query: cleanQuery,
+              chunks: [],
+              total_retrieved: 0,
+              latency_ms: Date.now() - startTime,
+              has_blocked_top_match: true,
+            };
+          }
+        }
+      }
+
+      // Check whether the top matching chunk across the entire database is blocked by authorization
+      const topCheckParams: unknown[] = [queryVectorLiteral, min_similarity > 0 ? min_similarity : 0.35];
       const topCheckSql = `
         SELECT 
           d.document_id,
@@ -97,10 +150,7 @@ export class RetrievalService {
         JOIN documents d ON c.document_id = d.id
         JOIN document_versions v ON c.version_id = v.id
         WHERE c.is_active = true AND d.status = 'completed' AND v.status = 'active'
-          AND (
-            (1 - (c.embedding <=> $1::vector)) >= $${topCheckParams.length}
-            ${docIdClause}
-          )
+          AND (1 - (c.embedding <=> $1::vector)) >= $2
         ORDER BY c.embedding <=> $1::vector ASC
         LIMIT 1
       `;
@@ -141,15 +191,41 @@ export class RetrievalService {
         }
 
         if (!isTopAllowed) {
-          // The most relevant document for this question is blocked by authorization.
-          // Do NOT return lower-ranked fallback chunks from other tenants to the LLM.
-          return {
-            query: cleanQuery,
-            chunks: [],
-            total_retrieved: 0,
-            latency_ms: Date.now() - startTime,
-            has_blocked_top_match: true,
-          };
+          // If the top match across the whole database is not allowed, check if the caller has any
+          // allowed chunk with comparable similarity (within 0.05 diff). If not, this is a targeted
+          // query for an unauthorized document, so block immediately.
+          const allowedCheckParams: unknown[] = [queryVectorLiteral, min_similarity > 0 ? min_similarity : 0.35];
+          let allowedTenantClause = "c.metadata->>'tenant_id' = 'global'";
+          if (effectiveTenantScope && effectiveTenantScope.length > 0 && !effectiveTenantScope.includes('*')) {
+            allowedCheckParams.push(effectiveTenantScope);
+            allowedTenantClause = `(c.metadata->>'tenant_id' = 'global' OR c.metadata->>'tenant_id' = ANY($${allowedCheckParams.length}::text[]))`;
+          } else if (effectiveTenantScope && effectiveTenantScope.includes('*')) {
+            allowedTenantClause = 'TRUE';
+          }
+
+          const topAllowedRes = await query<{ similarity: number }>(
+            `SELECT (1 - (c.embedding <=> $1::vector)) as similarity
+             FROM document_chunks c
+             JOIN documents d ON c.document_id = d.id
+             JOIN document_versions v ON c.version_id = v.id
+             WHERE c.is_active = true AND d.status = 'completed' AND v.status = 'active'
+               AND (1 - (c.embedding <=> $1::vector)) >= $2
+               AND ${allowedTenantClause}
+             ORDER BY c.embedding <=> $1::vector ASC
+             LIMIT 1`,
+            allowedCheckParams
+          );
+
+          const topAllowedSim = topAllowedRes.rows.length > 0 ? topAllowedRes.rows[0].similarity : 0;
+          if (top.similarity - topAllowedSim > 0.05) {
+            return {
+              query: cleanQuery,
+              chunks: [],
+              total_retrieved: 0,
+              latency_ms: Date.now() - startTime,
+              has_blocked_top_match: true,
+            };
+          }
         }
       }
     }
@@ -266,11 +342,23 @@ export class RetrievalService {
 
     const latencyMs = Date.now() - startTime;
 
+    let hasBlockedTopMatch = false;
+    if (verifiedChunks.length === 0) {
+      hasBlockedTopMatch = await this.hasBlockedMatchingEvidence({
+        query: cleanQuery,
+        min_similarity,
+        tenant_scope: effectiveTenantScope,
+        user_groups: effectiveUserGroups,
+        user,
+      });
+    }
+
     return {
       query: cleanQuery,
       chunks: verifiedChunks,
       total_retrieved: verifiedChunks.length,
       latency_ms: latencyMs,
+      has_blocked_top_match: hasBlockedTopMatch,
     };
   }
 
