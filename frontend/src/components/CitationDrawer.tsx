@@ -208,6 +208,19 @@ export function CitationDrawer({
               <span className="badge badge-muted">
                 Policy: {citation.disclosure_policy}
               </span>
+              {citation.is_summary && (
+                <span
+                  className="badge"
+                  style={{
+                    backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                    color: '#34d399',
+                    border: '1px solid rgba(16, 185, 129, 0.4)',
+                    fontWeight: 700,
+                  }}
+                >
+                  ★ Approved Customer Summary
+                </span>
+              )}
             </div>
 
             <h3
@@ -253,6 +266,29 @@ export function CitationDrawer({
               )}
             </div>
           </div>
+
+          {citation.is_summary && (
+            <div
+              style={{
+                marginBottom: '18px',
+                padding: '12px 16px',
+                borderRadius: 'var(--radius-md)',
+                backgroundColor: 'rgba(16, 185, 129, 0.08)',
+                border: '1px solid rgba(16, 185, 129, 0.25)',
+                fontSize: '0.825rem',
+                color: '#a7f3d0',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                lineHeight: 1.5,
+              }}
+            >
+              <span style={{ fontSize: '1.1rem' }}>✓</span>
+              <span>
+                This citation passage is an <strong>Approved Customer Summary</strong>. Internal troubleshooting details and employee notes have been redacted per disclosure policy.
+              </span>
+            </div>
+          )}
 
           {/* Evidence Passage Section */}
           <div style={{ marginBottom: '16px' }}>

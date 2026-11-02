@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Citation, RAGAnswerResponse } from '@/lib/api';
+import { Citation, RAGAnswerResponse, AudienceMode } from '@/lib/api';
 import { AuthUserProfile } from '@/lib/auth';
 
 export interface ChatMessage {
@@ -12,8 +12,11 @@ export interface ChatMessage {
   citations?: Citation[];
   insufficientEvidence?: boolean;
   unauthorizedAccess?: boolean;
+  policyViolated?: boolean;
+  audience?: AudienceMode;
   latencyMs?: {
     retrieval: number;
+    filtering?: number;
     generation: number;
     total: number;
   };
@@ -24,6 +27,8 @@ interface ChatAreaProps {
   messages: ChatMessage[];
   isLoading: boolean;
   currentUser?: AuthUserProfile | null;
+  audienceMode: AudienceMode;
+  onAudienceModeChange: (mode: AudienceMode) => void;
   onSendMessage: (question: string) => Promise<void>;
   onOpenCitation: (citation: Citation, allCitations: Citation[]) => void;
   onOpenUpload: () => void;
@@ -35,6 +40,8 @@ export function ChatArea({
   messages,
   isLoading,
   currentUser,
+  audienceMode,
+  onAudienceModeChange,
   onSendMessage,
   onOpenCitation,
   onOpenUpload,
@@ -255,6 +262,30 @@ export function ChatArea({
                     <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                       AccessCore
                     </span>
+                    {msg.audience && (
+                      <span
+                        style={{
+                          fontSize: '0.68rem',
+                          fontWeight: 600,
+                          padding: '2px 8px',
+                          borderRadius: '4px',
+                          background:
+                            msg.audience === 'customer'
+                              ? 'rgba(16, 185, 129, 0.15)'
+                              : 'rgba(99, 102, 241, 0.15)',
+                          color: msg.audience === 'customer' ? '#34d399' : '#a5b4fc',
+                          border:
+                            msg.audience === 'customer'
+                              ? '1px solid rgba(16, 185, 129, 0.3)'
+                              : '1px solid rgba(99, 102, 241, 0.3)',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        {msg.audience === 'customer' ? '🌐 Customer-Safe AI' : '🏢 Internal Mode'}
+                      </span>
+                    )}
                   </>
                 ) : (
                   <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)' }}>
@@ -339,6 +370,21 @@ export function ChatArea({
                             <polyline points="14 2 14 8 20 8" />
                           </svg>
                           <span>[{c.document_id}]</span>
+                          {c.is_summary && (
+                            <span
+                              style={{
+                                fontSize: '0.62rem',
+                                fontWeight: 700,
+                                color: '#34d399',
+                                backgroundColor: 'rgba(16, 185, 129, 0.2)',
+                                padding: '1px 5px',
+                                borderRadius: '3px',
+                                border: '1px solid rgba(16, 185, 129, 0.4)',
+                              }}
+                            >
+                              Approved Summary
+                            </span>
+                          )}
                           <span
                             style={{
                               maxWidth: '180px',
@@ -496,6 +542,121 @@ export function ChatArea({
                 Sign In
               </button>
             )}
+          </div>
+        )}
+
+        {currentUser && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              marginBottom: '10px',
+              padding: '0 4px',
+              flexWrap: 'wrap',
+              gap: '8px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                Audience:
+              </span>
+
+              {currentUser.user_type === 'customer_user' ? (
+                // Customer accounts are hard-locked to customer mode
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    padding: '3px 10px',
+                    borderRadius: 'var(--radius-sm)',
+                    backgroundColor: 'rgba(16, 185, 129, 0.12)',
+                    border: '1px solid rgba(16, 185, 129, 0.3)',
+                    fontSize: '0.75rem',
+                    color: '#34d399',
+                    fontWeight: 600,
+                  }}
+                  title="Customer accounts are locked to Customer-Facing mode per company policy."
+                >
+                  <span>🔒</span>
+                  <span>Customer-Facing Mode (Locked)</span>
+                </div>
+              ) : (
+                // Employees can freely switch between internal and customer modes
+                <div
+                  style={{
+                    display: 'inline-flex',
+                    background: 'var(--bg-input)',
+                    border: '1px solid var(--border-medium)',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '2px',
+                    gap: '2px',
+                  }}
+                >
+                  <button
+                    type="button"
+                    onClick={() => onAudienceModeChange('internal')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: 'var(--radius-sm)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      backgroundColor:
+                        audienceMode === 'internal'
+                          ? 'rgba(99, 102, 241, 0.25)'
+                          : 'transparent',
+                      color:
+                        audienceMode === 'internal'
+                          ? '#ffffff'
+                          : 'var(--text-muted)',
+                      outline:
+                        audienceMode === 'internal'
+                          ? '1px solid rgba(99, 102, 241, 0.6)'
+                          : 'none',
+                    }}
+                  >
+                    🏢 Internal Mode
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => onAudienceModeChange('customer')}
+                    style={{
+                      padding: '4px 10px',
+                      fontSize: '0.75rem',
+                      fontWeight: 600,
+                      borderRadius: 'var(--radius-sm)',
+                      border: 'none',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                      backgroundColor:
+                        audienceMode === 'customer'
+                          ? 'rgba(16, 185, 129, 0.25)'
+                          : 'transparent',
+                      color:
+                        audienceMode === 'customer'
+                          ? '#ffffff'
+                          : 'var(--text-muted)',
+                      outline:
+                        audienceMode === 'customer'
+                          ? '1px solid rgba(16, 185, 129, 0.6)'
+                          : 'none',
+                    }}
+                  >
+                    🌐 Customer-Facing Mode
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+              {audienceMode === 'customer'
+                ? 'Customer-safe AI • Approved summaries only'
+                : 'Internal diagnostics • Full runbooks & notes'}
+            </span>
           </div>
         )}
 

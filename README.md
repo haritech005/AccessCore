@@ -128,6 +128,9 @@ This sets up:
   - `access_groups`: Security group definitions (`grp_all_employees`, `grp_support`, `grp_it_security`, `grp_security_restricted`, `grp_incident_review`, etc.).
   - `users`: User profiles with cryptographic bcrypt password hashes, account lifecycle states (`active`, `suspended`, `inactive`), and roles.
   - `user_groups` & `user_tenants`: Authoritative many-to-many relationship tables.
+- **Phase 3 Disclosure Policies Schema (`003_disclosure_policies.sql`):**
+  - `documents.disclosure_policy`: Direct policy column (`customer_shareable`, `internal_only`, `approved_summary_only`).
+  - `approved_summaries`: Explicitly approved, customer-safe summaries associated with a specific document and version (`document_id`, `version_id`, `summary_text`, `summary_scope`, `approved_by`, `approved_at`, `status`).
 
 ### Development Test Accounts (CloudDesk Personas)
 All test accounts are seeded with default development password `CloudDesk2026!`:
@@ -161,6 +164,19 @@ npm run chunks:test
 ```
 
 This populates 7 active document records and 72 vector chunks into PostgreSQL.
+
+### Seeding Approved Customer Summaries & Disclosure Policies
+For confidential documents designated with disclosure policy `approved_summary_only` (e.g., support tickets `TKT-10421`, `TKT-10467`, `TKT-10533`), customer-facing answers rely exclusively on human-vetted, approved summaries:
+```bash
+cd backend
+npm run db:seed:policies
+```
+This syncs document disclosure policies and seeds active approved customer summaries in the `approved_summaries` table, pinned directly to the active version of each document.
+
+#### Approved Summaries Maintenance & Version Pinning
+- **Version Pinned:** Every approved summary record explicitly references `document_id` and `version_id`.
+- **Status Controlled:** Only summaries with `status = 'approved'` are used during pre-generation substitution.
+- **Revision Safety:** When a document is re-ingested with substantive changes (new version ID staged and activated), existing approved summaries remain linked to their original version. If an active summary does not exist for the new version, the system treats customer evidence as empty and falls back safely rather than leaking unvetted raw content.
 
 ---
 
@@ -221,12 +237,18 @@ npm run dev
 5. If re-uploading identical content, the system safely detects the hash and reuses existing embeddings without creating duplicate versions.
 
 ### Grounded Chat & Citations
-1. Enter a question into the chat input (e.g. *"What causes webhook error CD-WHK-504?"* or *"What is causing Lumenfield's API rate-limit errors?"*).
-2. The system executes vector similarity search against active chunks in PostgreSQL.
-3. If no relevant evidence exists, the system states:
+1. Select the intended **Audience Mode** in the chat toolbar:
+   - **🏢 Internal Mode:** Available to authorized support agents and employees. Incorporates full diagnostic runbooks, error details, and internal notes.
+   - **🌐 Customer-Facing Mode:** Available to employees and strictly enforced for customer users. Automatically purges internal-only runbooks, replaces confidential tickets with human-vetted approved summaries, and validates generated answers before display.
+   - *Customer Users:* Customer accounts (e.g. `cu_001` Hannah Brooks) are authoritatively locked to Customer-Facing mode in both the UI and backend; any request specifying internal mode is rejected with HTTP 403 `FORBIDDEN_AUDIENCE_MODE`.
+2. Enter a question into the chat input (e.g. *"What causes webhook error CD-WHK-504?"* or *"What is causing Lumenfield's API rate-limit errors?"*).
+3. The system executes vector similarity search against active chunks in PostgreSQL.
+4. If no relevant or permitted evidence exists, the system states:
    > *"I do not have sufficient evidence in the provided documents to answer this question."*
-4. If relevant evidence exists, the local LLM generates a grounded answer strictly citing source document IDs:
-   - Displays inline clickable citation tags `[PDOC-0001]`, `[TKT-10467]`.
+5. If relevant permitted evidence exists, the local LLM generates a grounded answer strictly citing source document IDs:
+   - Displays audience mode badge (`🏢 Internal` or `🌐 Customer-Facing`) on assistant messages.
+   - Displays inline clickable citation tags `[PDOC-0002]`, `[TKT-10421]`.
+   - Distinguishes approved customer summaries with a `★ Approved Summary` badge on citation pills and in the drawer.
    - Displays a collapsible **Verified Evidence Sources** drawer showing document titles, snippets, sensitivity badges, and disclosure policies.
    - Accurately distinguishes confirmed facts from unconfirmed hypotheses.
 
@@ -259,6 +281,15 @@ AccessCore includes a comprehensive automated test battery covering foundation p
 | **Secure Document & Citation APIs** | `npm run docs:secure:test` | Listings, details, preview snippets, direct citation resolution, downloads, and anti-enumeration 404 parity (65 tests). |
 | **Master Security Suite** | `npm run test:security` | Comprehensive end-to-end security verification covering all 5 core security categories (59 tests). |
 
+### Disclosure Policies & Customer-Safe AI Test Suites (Phase 3)
+| Suite | Command | What It Verifies |
+|---|---|---|
+| **Policy Schemas & Constraints** | `npm run policy:schema:test` | Zod validation rules, sensitivity-to-policy constraints, and database foreign keys (15 tests). |
+| **Disclosure Policy Service** | `npm run policy:service:test` | Audience resolution, evidence evaluation, approved summary retrieval, and permission checks (19 tests). |
+| **Pre-Generation Filtering** | `npm run filtering:test` | Server-side exclusion of internal evidence, prompt isolation with untrusted delimiters, and 0ms short-circuiting (8 tests). |
+| **Answer & Citation Validation** | `npm run validation:test` | Groundedness verification, customer content safety scanning, secret interception, and citation authorization (20 tests). |
+| **Comprehensive Security Suite** | `npm run test:disclosure:security` | End-to-end disclosure verification across all 5 security categories: synthetic dataset policies, prompt injection resistance, leak prevention, citation/preview authorization, and Phase 1/Phase 2 regressions (25 tests). |
+
 ---
 
 ## 8. Security Architecture & Phase 2 Capabilities
@@ -270,3 +301,28 @@ AccessCore Phase 2 enforces defense-in-depth authorization directly within the t
 - **Anti-Enumeration 404 Parity:** Unauthorized document, preview, citation, and download requests return an identical HTTP 404 `DOCUMENT_NOT_FOUND` as nonexistent documents, preventing enumeration attacks.
 - **Customer Quarantine:** Customer users are strictly isolated to their assigned customer tenant and public documents; customer users cannot download confidential tickets or inspect internal ingestion jobs.
 - **Real-Time Revocation:** Database permission changes take immediate effect on subsequent requests without requiring token reissuance or server restarts.
+
+---
+
+## 9. Disclosure Policy Architecture & Customer-Safe AI (Phase 3)
+
+AccessCore enforces customer disclosure safety through deterministic, multi-layered application controls:
+- **Two-Phase Security Separation:**
+  1. *Phase 2 Authorization:* "May this user access this document?" (Evaluated against tenancy, groups, and clearance).
+  2. *Phase 3 Disclosure:* "May this information be disclosed in this answer mode?" (Evaluated against `internal` vs `customer` audience mode).
+- **Audience Mode Resolution & Lockdown:**
+  - Customer users (`customer_user` role, e.g., Hannah Brooks) are authoritatively locked to `customer` mode on the backend. Any attempt to request `internal` mode results in HTTP 403 `FORBIDDEN_AUDIENCE_MODE`.
+  - Authorized internal employees can toggle between `internal` (full diagnostic runbooks, error metrics) and `customer` (customer-safe synthesis and approved summaries).
+- **Pre-Generation Evidence Filtering:**
+  - `internal_only` evidence is completely pruned before LLM prompt construction in customer mode.
+  - `approved_summary_only` documents (such as confidential support tickets) have their raw text replaced by their vetted approved summary before entering context.
+  - If no permitted evidence remains after filtering, the LLM is **never invoked** (0ms latency, zero prompt tokens), returning a safe insufficient evidence response.
+  - Retrieved evidence is enclosed in structural untrusted delimiters (`<<<BEGIN_UNTRUSTED_DOCUMENT_EVIDENCE>>> ... <<<END_UNTRUSTED_DOCUMENT_EVIDENCE>>>`) to neutralize prompt injection attacks.
+- **Post-Generation Output Validation:**
+  - Answers generated by the LLM undergo deterministic regex and lexical checks before being returned to the client:
+    - *Document Groundedness:* Verifies all cited or mentioned document IDs (`PDOC-`, `TKT-`, `SEC-`) exist in the permitted evidence set.
+    - *Customer Content Safety:* Scans for leaked employee IDs (`emp_[0-9]+`), internal groups (`grp_all_employees`, `grp_support`), internal runbooks, internal escalation triggers, and unapproved diagnostic details.
+    - *Cross-Tenant Isolation:* Ensures tenant-specific data from other customer tenants cannot leak.
+    - *Secret Interception:* Detects hardcoded API keys, tokens, or private keys.
+    - *Citation Policy:* Ensures all returned citations link only to authorized and customer-shareable resources.
+  - If a generated answer fails validation, a single bounded regeneration is attempted with strict warnings; if that fails or cannot be safely cleared, AccessCore returns a deterministic fallback message: `"I cannot provide details on internal infrastructure or unconfirmed diagnostics for customer-facing inquiries."`

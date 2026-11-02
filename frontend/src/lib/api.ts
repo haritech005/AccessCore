@@ -21,7 +21,14 @@ export interface HealthCheckData {
 }
 
 export type Sensitivity = 'public' | 'internal' | 'confidential' | 'restricted';
-export type DisclosurePolicy = 'customer_facing' | 'internal_only' | 'restricted_roles';
+export type DisclosurePolicy =
+  | 'customer_shareable'
+  | 'customer_facing'
+  | 'internal_only'
+  | 'approved_summary_only'
+  | 'direct'
+  | 'restricted';
+export type AudienceMode = 'internal' | 'customer';
 
 export interface Citation {
   document_id: string;
@@ -32,6 +39,7 @@ export interface Citation {
   tenant_id: string;
   sensitivity: Sensitivity;
   disclosure_policy: DisclosurePolicy;
+  is_summary?: boolean;
 }
 
 export interface RAGAnswerResponse {
@@ -40,6 +48,8 @@ export interface RAGAnswerResponse {
   citations: Citation[];
   insufficient_evidence: boolean;
   unauthorized_access?: boolean;
+  policy_violated?: boolean;
+  audience?: AudienceMode;
   retrieved_chunks: {
     document_id: string;
     chunk_index: number;
@@ -47,6 +57,7 @@ export interface RAGAnswerResponse {
   }[];
   latency_ms: {
     retrieval: number;
+    filtering?: number;
     generation: number;
     total: number;
   };
@@ -179,6 +190,7 @@ export async function askQuestion(
     tenant_scope?: string[];
     user_groups?: string[];
     token?: string;
+    audience?: AudienceMode;
   }
 ): Promise<{
   data: RAGAnswerResponse | null;
@@ -201,6 +213,7 @@ export async function askQuestion(
         min_similarity: options?.min_similarity ?? 0.35,
         tenant_scope: options?.tenant_scope,
         user_groups: options?.user_groups,
+        audience: options?.audience,
       }),
       cache: 'no-store',
     });

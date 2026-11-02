@@ -7,6 +7,7 @@ import {
   askQuestion,
   DocumentRecord,
   Citation,
+  AudienceMode,
 } from '@/lib/api';
 import { getCurrentUser, logoutUser, AuthUserProfile } from '@/lib/auth';
 import { Header } from '@/components/Header';
@@ -22,6 +23,7 @@ export default function Home() {
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [audienceMode, setAudienceMode] = useState<AudienceMode>('internal');
 
   // Citation inspection drawer state
   const [activeCitation, setActiveCitation] = useState<Citation | null>(null);
@@ -40,6 +42,13 @@ export default function Home() {
     setCurrentUser(user);
 
     if (user) {
+      // Customer users locked to customer-facing mode
+      if (user.user_type === 'customer_user') {
+        setAudienceMode('customer');
+      } else {
+        setAudienceMode('internal');
+      }
+
       const docsResult = await fetchDocuments();
       if (docsResult.data) {
         setDocuments(docsResult.data);
@@ -53,6 +62,12 @@ export default function Home() {
 
   const handleLoginSuccess = async (user: AuthUserProfile) => {
     setCurrentUser(user);
+    if (user.user_type === 'customer_user') {
+      setAudienceMode('customer');
+    } else {
+      setAudienceMode('internal');
+    }
+
     const docsResult = await fetchDocuments();
     if (docsResult.data) {
       setDocuments(docsResult.data);
@@ -63,6 +78,7 @@ export default function Home() {
     await logoutUser();
     setCurrentUser(null);
     setDocuments([]);
+    setAudienceMode('internal');
   };
 
   // Handle sending a chat message to the RAG pipeline
@@ -84,8 +100,12 @@ export default function Home() {
     setMessages((prev) => [...prev, userMessage]);
     setIsLoading(true);
 
+    // Hard-lock customer accounts to customer mode; employees use selected audienceMode
+    const effectiveAudience: AudienceMode =
+      currentUser.user_type === 'customer_user' ? 'customer' : audienceMode;
+
     try {
-      const result = await askQuestion(question);
+      const result = await askQuestion(question, { audience: effectiveAudience });
 
       if (result.error || !result.data) {
         const errorMessage: ChatMessage = {
@@ -96,6 +116,7 @@ export default function Home() {
             'Unable to process question. Please ensure the knowledge service is running.',
           timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
           insufficientEvidence: false,
+          audience: effectiveAudience,
         };
         setMessages((prev) => [...prev, errorMessage]);
       } else {
@@ -107,6 +128,8 @@ export default function Home() {
           citations: result.data.citations,
           insufficientEvidence: result.data.insufficient_evidence,
           unauthorizedAccess: result.data.unauthorized_access,
+          policyViolated: result.data.policy_violated,
+          audience: result.data.audience || effectiveAudience,
           latencyMs: result.data.latency_ms,
           retrievedChunksCount: result.data.retrieved_chunks.length,
         };
@@ -118,6 +141,7 @@ export default function Home() {
         role: 'assistant',
         content: 'An unexpected connection error occurred while querying the knowledge base.',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        audience: effectiveAudience,
       };
       setMessages((prev) => [...prev, fallbackErrorMessage]);
     } finally {
@@ -161,6 +185,8 @@ export default function Home() {
           messages={messages}
           isLoading={isLoading}
           currentUser={currentUser}
+          audienceMode={audienceMode}
+          onAudienceModeChange={setAudienceMode}
           onSendMessage={handleSendMessage}
           onOpenCitation={handleOpenCitation}
           onOpenUpload={() => handleOpenKnowledgeDrawer('upload')}
