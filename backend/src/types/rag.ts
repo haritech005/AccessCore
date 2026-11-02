@@ -1,5 +1,6 @@
 import { DocumentChunk, Sensitivity, DisclosurePolicy } from './document';
 import { AuthenticatedUser } from './identity';
+import { AudienceMode } from './policy';
 
 export interface RetrievalQuery {
   query: string;
@@ -24,6 +25,7 @@ export interface Citation {
   tenant_id: string;
   sensitivity: Sensitivity;
   disclosure_policy: DisclosurePolicy;
+  is_summary?: boolean;
 }
 
 export interface RAGAnswerResponse {
@@ -32,6 +34,7 @@ export interface RAGAnswerResponse {
   citations: Citation[];
   insufficient_evidence: boolean;
   unauthorized_access: boolean;
+  audience?: AudienceMode;
   retrieved_chunks: {
     document_id: string;
     chunk_index: number;
@@ -39,6 +42,7 @@ export interface RAGAnswerResponse {
   }[];
   latency_ms: {
     retrieval: number;
+    filtering?: number;
     generation: number;
     total: number;
   };

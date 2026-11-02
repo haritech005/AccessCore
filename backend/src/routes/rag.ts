@@ -48,7 +48,7 @@ router.post(
   '/chat',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { question, top_k, min_similarity, tenant_scope, model } = req.body;
+      const { question, top_k, min_similarity, tenant_scope, model, audience } = req.body;
 
       if (!question || typeof question !== 'string') {
         throw new AppError('Field \'question\' is required and must be a string.', 400, 'INVALID_INPUT');
@@ -67,6 +67,7 @@ router.post(
         user_groups: effectiveUserGroups,
         user: req.user,
         model: typeof model === 'string' ? model : undefined,
+        audience: typeof audience === 'string' ? audience : undefined,
       });
 
       res.status(200).json({
@@ -84,7 +85,7 @@ router.post(
   '/rag/query',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { question, top_k, min_similarity, tenant_scope, model } = req.body;
+      const { question, top_k, min_similarity, tenant_scope, model, audience } = req.body;
 
       if (!question || typeof question !== 'string') {
         throw new AppError('Field \'question\' is required and must be a string.', 400, 'INVALID_INPUT');
@@ -103,6 +104,7 @@ router.post(
         user_groups: effectiveUserGroups,
         user: req.user,
         model: typeof model === 'string' ? model : undefined,
+        audience: typeof audience === 'string' ? audience : undefined,
       });
 
       res.status(200).json({

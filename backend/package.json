@@ -27,7 +27,8 @@
     "test:security": "tsx src/services/testSecuritySuite.ts",
     "db:seed:policies": "tsx src/db/seedDisclosurePolicies.ts",
     "policy:schema:test": "tsx src/services/testPolicySchema.ts",
-    "policy:service:test": "tsx src/services/testDisclosurePolicyService.ts"
+    "policy:service:test": "tsx src/services/testDisclosurePolicyService.ts",
+    "filtering:test": "tsx src/services/testPreGenerationFiltering.ts"
   },
   "keywords": [
     "accesscore",
