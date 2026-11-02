@@ -30,6 +30,7 @@ export interface DocumentResource {
   tenant_id: string;
   allowed_groups: string[];
   sensitivity: SensitivityLevel;
+  disclosure_policy?: string;
   is_active?: boolean;
   status?: string;
 }
@@ -294,7 +295,16 @@ export class AuthorizationService {
       isPublic ||
       user.groups.some((grp) => allowedGroups.includes(grp));
 
-    if (!hasMatchingGroup) {
+    // Phase 3: Customer users are authorized to read citations and previews for documents
+    // with approved_summary_only in their assigned tenant scope
+    const isCustomerApprovedSummary =
+      user.user_type === 'customer_user' &&
+      (action === 'read:citation' || action === 'preview:document') &&
+      'disclosure_policy' in resource &&
+      resource.disclosure_policy === 'approved_summary_only' &&
+      user.tenant_scope.includes(resource.tenant_id);
+
+    if (!hasMatchingGroup && !isCustomerApprovedSummary) {
       return {
         allowed: false,
         reason: `Group access denied: user groups do not match document allowed groups`,
@@ -395,7 +405,7 @@ export class AuthorizationService {
    */
   authorizeDocument(
     user: AuthenticatedUser,
-    doc: DocumentAccessTarget,
+    doc: DocumentAccessTarget & { disclosure_policy?: string },
     action: AuthzAction = 'read:document',
     context?: AuthorizationContext
   ): PermissionCheckResult {
@@ -408,6 +418,7 @@ export class AuthorizationService {
         tenant_id: doc.tenant_id,
         allowed_groups: doc.allowed_groups,
         sensitivity: doc.sensitivity || 'internal',
+        disclosure_policy: doc.disclosure_policy,
         is_active: doc.is_active,
       },
       context

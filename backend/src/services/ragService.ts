@@ -5,10 +5,13 @@ import { config } from '../config';
 import { retrievalService } from './retrievalService';
 import { authorizationService } from './authorizationService';
 import { disclosurePolicyService, PermittedEvidenceItem } from './disclosurePolicyService';
+import { postGenerationValidator, POLICY_VIOLATION_MESSAGE } from './postGenerationValidator';
 import { Citation, RAGAnswerResponse, RetrievedChunk } from '../types/rag';
 import { AuthenticatedUser } from '../types/identity';
 import { AudienceMode } from '../types/policy';
 import { AppError } from '../middleware/errorHandler';
+
+export { POLICY_VIOLATION_MESSAGE };
 
 export interface RAGQueryOptions {
   question: string;
@@ -375,10 +378,7 @@ ${items}
     // 3. Format Context and LangChain Prompt Template with Injection Boundary Delimiters
     const contextText = this.formatContext(permittedEvidence);
 
-    const promptTemplate = ChatPromptTemplate.fromMessages([
-      [
-        'system',
-        `You are AccessCore, an enterprise knowledge assistant for CloudDesk.
+    const systemPrompt = `You are AccessCore, an enterprise knowledge assistant for CloudDesk.
 
 Answer the user's question clearly and accurately using the supplied evidence context. Do not claim that information is supported unless the evidence actually supports it.
 
@@ -425,7 +425,12 @@ EVIDENCE CONTEXT:
 USER QUESTION:
 {question}
 
-GROUNDED ANSWER:`,
+GROUNDED ANSWER:`;
+
+    const promptTemplate = ChatPromptTemplate.fromMessages([
+      [
+        'system',
+        systemPrompt,
       ],
     ]);
 
@@ -460,20 +465,135 @@ GROUNDED ANSWER:`,
 
     const generationLatency = Date.now() - genStart;
 
-    // 6. Validate Citations & Insufficient Evidence against permitted evidence
+    // 6. Insufficient Evidence Refusal Enforcement
     const isInsufficient = this.checkInsufficientEvidence(rawAnswer, permittedEvidence);
-    const validatedCitations = isInsufficient
-      ? []
-      : this.extractAndValidateCitations(rawAnswer, permittedEvidence);
+    if (isInsufficient) {
+      return {
+        question: cleanQuestion,
+        answer: INSUFFICIENT_EVIDENCE_MESSAGE,
+        citations: [],
+        insufficient_evidence: true,
+        unauthorized_access: false,
+        policy_violated: false,
+        audience: effectiveAudience,
+        retrieved_chunks: permittedEvidence.map((c) => ({
+          document_id: c.document_id,
+          chunk_index: c.chunk_index,
+          similarity: c.similarity,
+        })),
+        latency_ms: {
+          retrieval: retrievalLatency,
+          filtering: filterLatency,
+          generation: generationLatency,
+          total: Date.now() - totalStart,
+        },
+      };
+    }
 
-    const finalAnswer = isInsufficient ? INSUFFICIENT_EVIDENCE_MESSAGE : rawAnswer;
+    // 7. Post-Generation Output Validation (Phase 3 Section 9)
+    let validationResult = postGenerationValidator.validateAnswer({
+      answer: rawAnswer,
+      permittedEvidence,
+      audience: effectiveAudience,
+      user,
+      tenantScope: tenant_scope,
+    });
+
+    // 8. Bounded Regeneration if validation failed
+    if (!validationResult.valid) {
+      console.warn(
+        `[RAG Service] Post-generation validation failed for audience '${effectiveAudience}': ${validationResult.issues.map((i) => i.code).join(', ')}. Attempting bounded regeneration...`
+      );
+
+      try {
+        const retryPromptTemplate = ChatPromptTemplate.fromMessages([
+          [
+            'system',
+            `${systemPrompt}
+
+## CRITICAL AUDIENCE DISCLOSURE CORRECTION
+Your previous generated response failed compliance checks for audience mode '${effectiveAudience}':
+${validationResult.issues.map((i) => `- ${i.message}`).join('\n')}
+
+Regenerate your answer strictly grounded ONLY in the permitted evidence context.
+Never reveal internal employee IDs, internal diagnostic notes, dispatcher recovery, secret tokens, or other tenants' data.`
+          ],
+          [
+            'human',
+            `EVIDENCE CONTEXT:
+{context}
+
+USER QUESTION:
+{question}
+
+CORRECTED GROUNDED ANSWER:`
+          ]
+        ]);
+
+        const retryChain = retryPromptTemplate.pipe(llm).pipe(new StringOutputParser());
+        const retryRaw = await retryChain.invoke({
+          context: contextText,
+          question: cleanQuestion,
+        });
+        const retryClean = deduplicateInlineCitations(retryRaw.trim());
+
+        const retryValResult = postGenerationValidator.validateAnswer({
+          answer: retryClean,
+          permittedEvidence,
+          audience: effectiveAudience,
+          user,
+          tenantScope: tenant_scope,
+        });
+
+        if (retryValResult.valid) {
+          rawAnswer = retryClean;
+          validationResult = retryValResult;
+        }
+      } catch (retryErr) {
+        console.warn('[RAG Service] Bounded regeneration attempt failed:', retryErr);
+      }
+    }
+
+    // If still invalid after bounded regeneration, enforce safe policy failure response
+    if (!validationResult.valid) {
+      return {
+        question: cleanQuestion,
+        answer: POLICY_VIOLATION_MESSAGE,
+        citations: [],
+        insufficient_evidence: true,
+        unauthorized_access: false,
+        policy_violated: true,
+        audience: effectiveAudience,
+        retrieved_chunks: permittedEvidence.map((c) => ({
+          document_id: c.document_id,
+          chunk_index: c.chunk_index,
+          similarity: c.similarity,
+        })),
+        latency_ms: {
+          retrieval: retrievalLatency,
+          filtering: filterLatency,
+          generation: Date.now() - genStart,
+          total: Date.now() - totalStart,
+        },
+      };
+    }
+
+    // 9. Validate Citations against Permitted Evidence & Audience Policies (Phase 3 Section 10)
+    const initialCitations = this.extractAndValidateCitations(rawAnswer, permittedEvidence);
+    const citationValResult = postGenerationValidator.validateCitations(
+      initialCitations,
+      permittedEvidence,
+      effectiveAudience
+    );
+    const validatedCitations = citationValResult.validCitations;
 
     return {
       question: cleanQuestion,
-      answer: finalAnswer,
+      answer: rawAnswer,
       citations: validatedCitations,
-      insufficient_evidence: isInsufficient,
+      insufficient_evidence: false,
       unauthorized_access: false,
+      policy_violated: false,
       audience: effectiveAudience,
       retrieved_chunks: permittedEvidence.map((c) => ({
         document_id: c.document_id,
@@ -483,7 +603,7 @@ GROUNDED ANSWER:`,
       latency_ms: {
         retrieval: retrievalLatency,
         filtering: filterLatency,
-        generation: generationLatency,
+        generation: Date.now() - genStart,
         total: Date.now() - totalStart,
       },
     };

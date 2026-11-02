@@ -34,6 +34,7 @@ export interface RAGAnswerResponse {
   citations: Citation[];
   insufficient_evidence: boolean;
   unauthorized_access: boolean;
+  policy_violated?: boolean;
   audience?: AudienceMode;
   retrieved_chunks: {
     document_id: string;

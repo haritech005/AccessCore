@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ingestionService } from '../services/ingestionService';
 import { authorizationService } from '../services/authorizationService';
+import { disclosurePolicyService } from '../services/disclosurePolicyService';
 import { DocumentMetadata, DocumentRecord } from '../types/document';
 import { AppError } from '../middleware/errorHandler';
 import { requireAuth } from '../middleware/auth';
@@ -21,12 +22,14 @@ function extractDocumentResource(doc: DocumentRecord | { metadata?: Record<strin
   tenant_id: string;
   allowed_groups: string[];
   sensitivity: SensitivityLevel;
+  disclosure_policy: string;
 } {
   const meta = (doc.metadata || {}) as Record<string, unknown>;
   return {
     tenant_id: (meta.tenant_id as string) || 'global',
     allowed_groups: (meta.allowed_groups as string[]) || (meta.authorized_groups as string[]) || [],
     sensitivity: (meta.sensitivity as SensitivityLevel) || 'internal',
+    disclosure_policy: (meta.disclosure_policy as string) || 'internal_only',
   };
 }
 
@@ -238,8 +241,43 @@ router.get(
 
         const chunkMeta = (chunkData.chunk.metadata || {}) as Record<string, unknown>;
         const chunkSens = (chunkMeta.sensitivity as SensitivityLevel) || docResource.sensitivity;
+        const chunkDisclosure =
+          (chunkMeta.disclosure_policy as string) ||
+          (details.document.metadata?.disclosure_policy as string) ||
+          'internal_only';
+
         if (chunkSens === 'restricted' && !authorizationService.hasRestrictedClearance(user)) {
           throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
+        }
+
+        // Customer user disclosure boundaries: internal_only & restricted are forbidden
+        if (user.user_type === 'customer_user') {
+          if (chunkDisclosure === 'internal_only' || chunkSens === 'restricted') {
+            throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
+          }
+
+          // If approved_summary_only, return ONLY the approved customer summary
+          if (chunkDisclosure === 'approved_summary_only') {
+            const approvedSummary = await disclosurePolicyService.getApprovedSummary(documentId, 'customer');
+            if (!approvedSummary) {
+              throw new AppError(`Document '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
+            }
+            res.status(200).json({
+              success: true,
+              data: {
+                document_id: details.document.document_id,
+                title: details.document.title,
+                tenant_id: docResource.tenant_id,
+                sensitivity: chunkSens,
+                disclosure_policy: chunkDisclosure,
+                chunk_index: chunkData.chunk.chunk_index,
+                snippet: approvedSummary.summary_text,
+                section_heading: 'Approved Customer Summary',
+                is_summary: true,
+              },
+            });
+            return;
+          }
         }
 
         res.status(200).json({
@@ -249,6 +287,7 @@ router.get(
             title: details.document.title,
             tenant_id: docResource.tenant_id,
             sensitivity: chunkSens,
+            disclosure_policy: chunkDisclosure,
             chunk_index: chunkData.chunk.chunk_index,
             snippet: chunkData.chunk.content,
             section_heading: chunkMeta.section_heading || undefined,
@@ -317,6 +356,37 @@ async function handleCitationResolution(req: Request, res: Response, next: NextF
     if (!access.allowed) {
       // Uniform 404 prevents citation and document existence enumeration
       throw new AppError(`Citation for '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
+    }
+
+    // Customer user disclosure boundaries: internal_only & restricted are forbidden
+    if (user.user_type === 'customer_user') {
+      if (disclosurePolicy === 'internal_only' || sensitivity === 'restricted') {
+        throw new AppError(`Citation for '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
+      }
+
+      // If approved_summary_only, return ONLY the approved customer summary
+      if (disclosurePolicy === 'approved_summary_only') {
+        const approvedSummary = await disclosurePolicyService.getApprovedSummary(documentId, 'customer');
+        if (!approvedSummary) {
+          throw new AppError(`Citation for '${documentId}' not found.`, 404, 'DOCUMENT_NOT_FOUND');
+        }
+        res.status(200).json({
+          success: true,
+          data: {
+            document_id: documentId,
+            title: chunkData.document.title,
+            chunk_index: chunkData.chunk.chunk_index,
+            snippet: approvedSummary.summary_text,
+            section_heading: 'Approved Customer Summary',
+            source_location: chunkMeta.source_location || undefined,
+            tenant_id: tenantId,
+            sensitivity,
+            disclosure_policy: disclosurePolicy,
+            is_summary: true,
+          },
+        });
+        return;
+      }
     }
 
     res.status(200).json({
