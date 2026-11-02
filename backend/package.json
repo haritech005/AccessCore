@@ -26,7 +26,8 @@
     "docs:secure:test": "tsx src/services/testSecureDocumentCitationApis.ts",
     "test:security": "tsx src/services/testSecuritySuite.ts",
     "db:seed:policies": "tsx src/db/seedDisclosurePolicies.ts",
-    "policy:schema:test": "tsx src/services/testPolicySchema.ts"
+    "policy:schema:test": "tsx src/services/testPolicySchema.ts",
+    "policy:service:test": "tsx src/services/testDisclosurePolicyService.ts"
   },
   "keywords": [
     "accesscore",
