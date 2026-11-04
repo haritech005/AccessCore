@@ -30,7 +30,8 @@
     "policy:service:test": "tsx src/services/testDisclosurePolicyService.ts",
     "filtering:test": "tsx src/services/testPreGenerationFiltering.ts",
     "validation:test": "tsx src/services/testAnswerAndCitationValidation.ts",
-    "test:disclosure:security": "tsx src/services/testDisclosureSecuritySuite.ts"
+    "test:disclosure:security": "tsx src/services/testDisclosureSecuritySuite.ts",
+    "eval:baseline": "tsx src/evaluation/runBaselineEval.ts"
   },
   "keywords": [
     "accesscore",
