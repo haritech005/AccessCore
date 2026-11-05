@@ -1,9 +1,12 @@
 import { query } from '../db';
 import { embeddingService } from './embeddingService';
 import { authorizationService } from './authorizationService';
-import { RetrievalQuery, RetrievedChunk } from '../types/rag';
+import { fullTextSearchService } from './fullTextSearchService';
+import { RetrievalQuery, RetrievedChunk, FullTextQuery, FullTextSearchResult } from '../types/rag';
 import { AuthenticatedUser, SensitivityLevel } from '../types/identity';
 import { AppError } from '../middleware/errorHandler';
+
+export { fullTextSearchService };
 
 export interface RetrievalResult {
   query: string;
@@ -450,6 +453,13 @@ export class RetrievalService {
 
     const res = await query(sql, params);
     return res.rows.length > 0;
+  }
+
+  /**
+   * Delegates to fullTextSearchService for PostgreSQL sparse lexical keyword search.
+   */
+  async searchFullText(options: FullTextQuery): Promise<FullTextSearchResult> {
+    return fullTextSearchService.searchChunks(options);
   }
 }
 

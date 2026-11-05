@@ -16,6 +16,28 @@ export interface RetrievedChunk extends DocumentChunk {
   cosine_distance: number;
 }
 
+export interface FullTextChunk extends DocumentChunk {
+  rank: number;
+  headline?: string;
+}
+
+export interface FullTextQuery {
+  query: string;
+  top_k?: number;
+  tenant_scope?: string[];
+  user_groups?: string[];
+  user?: AuthenticatedUser;
+  audience?: AudienceMode | string;
+}
+
+export interface FullTextSearchResult {
+  query: string;
+  chunks: FullTextChunk[];
+  total_retrieved: number;
+  latency_ms: number;
+  has_blocked_top_match?: boolean;
+}
+
 export interface Citation {
   document_id: string;
   title: string;

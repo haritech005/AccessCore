@@ -31,6 +31,7 @@
     "filtering:test": "tsx src/services/testPreGenerationFiltering.ts",
     "validation:test": "tsx src/services/testAnswerAndCitationValidation.ts",
     "test:disclosure:security": "tsx src/services/testDisclosureSecuritySuite.ts",
+    "fts:test": "tsx src/services/testFullTextSearch.ts",
     "eval:baseline": "tsx src/evaluation/runBaselineEval.ts"
   },
   "keywords": [
