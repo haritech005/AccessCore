@@ -1,0 +1,576 @@
+{
+  "timestamp": "2026-11-05T07:00:46.629Z",
+  "totalCases": 15,
+  "overallPassedCount": 14,
+  "overallPassRate": "93.3%",
+  "meanRecallAt3": "70.0%",
+  "meanRecallAt4": "73.0%",
+  "citationValidityRate": "93.3%",
+  "groundednessComplianceRate": "100.0%",
+  "latency": {
+    "medianRetrievalMs": 47,
+    "meanRetrievalMs": 51,
+    "medianGenerationMs": 14052,
+    "meanGenerationMs": 12222,
+    "medianTotalMs": 14104,
+    "meanTotalMs": 12275
+  },
+  "results": [
+    {
+      "id": "EVAL-001",
+      "category": "direct_factual_error_code",
+      "description": "Direct factual query on error code CD-WHK-504 and retry backoff schedule",
+      "question": "What does error code CD-WHK-504 mean and what is its retry policy?",
+      "user": "Priya Raman (emp_001)",
+      "audience": "internal",
+      "expectedDocumentIds": [
+        "PDOC-0002"
+      ],
+      "retrievedDocumentIds": [
+        "PDOC-0002",
+        "PDOC-0002",
+        "PDOC-0001",
+        "PDOC-0001"
+      ],
+      "top3DocumentIds": [
+        "PDOC-0002",
+        "PDOC-0002",
+        "PDOC-0001"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "PDOC-0002",
+          "is_summary": false,
+          "title": "Webhooks Overview"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 88,
+        "generationMs": 7615,
+        "totalMs": 7708
+      },
+      "answerExcerpt": "Error code CD-WHK-504 means that CloudDesk sent an event to the customer's endpoint and did not receive a response wi...",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-002",
+      "category": "direct_factual_plan_limit",
+      "description": "Direct factual query regarding Starter plan rate limits in customer mode",
+      "question": "How many API requests per minute does the Starter plan allow?",
+      "user": "Hannah Brooks (cu_001)",
+      "audience": "customer",
+      "expectedDocumentIds": [
+        "PDOC-0003"
+      ],
+      "retrievedDocumentIds": [
+        "PDOC-0003",
+        "PDOC-0003",
+        "PDOC-0002",
+        "PDOC-0004"
+      ],
+      "top3DocumentIds": [
+        "PDOC-0003",
+        "PDOC-0003",
+        "PDOC-0002"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "PDOC-0003",
+          "is_summary": false,
+          "title": "API Rate Limits"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 51,
+        "generationMs": 14540,
+        "totalMs": 14593
+      },
+      "answerExcerpt": "The Starter plan allows 60 API requests per minute. This information can be found in [PDOC-0003] under the section \"W...",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-003",
+      "category": "ticket_specific",
+      "description": "Ticket-specific query on Lumenfield TKT-10467 in internal mode",
+      "question": "What is the issue described in ticket TKT-10467?",
+      "user": "Priya Raman (emp_001)",
+      "audience": "internal",
+      "expectedDocumentIds": [
+        "TKT-10467"
+      ],
+      "retrievedDocumentIds": [
+        "TKT-10421",
+        "TKT-10467",
+        "TKT-10467",
+        "PDOC-0001"
+      ],
+      "top3DocumentIds": [
+        "TKT-10421",
+        "TKT-10467",
+        "TKT-10467"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "TKT-10467",
+          "is_summary": false,
+          "title": "Lumenfield API rate-limit errors"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 61,
+        "generationMs": 21734,
+        "totalMs": 21797
+      },
+      "answerExcerpt": "Ticket TKT-10467 describes API rate-limit errors reported by the support agent of Lumenfield Academy. The customer is...",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-004",
+      "category": "customer_facing_disclosure",
+      "description": "Support agent querying ticket TKT-10421 in customer mode; must receive approved summary only",
+      "question": "What is the status of ticket TKT-10421?",
+      "user": "Priya Raman (emp_001)",
+      "audience": "customer",
+      "expectedDocumentIds": [
+        "TKT-10421"
+      ],
+      "retrievedDocumentIds": [
+        "TKT-10421",
+        "TKT-10467",
+        "PDOC-0001",
+        "PDOC-0001"
+      ],
+      "top3DocumentIds": [
+        "TKT-10421",
+        "TKT-10467",
+        "PDOC-0001"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "TKT-10421",
+          "is_summary": true,
+          "title": "Brightwave webhook delivery timeouts"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 44,
+        "generationMs": 14052,
+        "totalMs": 14104
+      },
+      "answerExcerpt": "Ticket TKT-10421 is about intermittent webhook delivery timeouts reported for the workspace of tenant ten_brightwave....",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-005",
+      "category": "cross_document_synthesis",
+      "description": "Synthesis across ticket TKT-10421 and product doc PDOC-0002 for Brightwave timeout",
+      "question": "Why did Brightwave encounter webhook delivery issues during their catalog synchronization in TKT-10421 and what standard CloudDesk timeout limits apply?",
+      "user": "Elena Duarte (emp_003)",
+      "audience": "internal",
+      "expectedDocumentIds": [
+        "TKT-10421",
+        "PDOC-0002"
+      ],
+      "retrievedDocumentIds": [
+        "TKT-10421",
+        "TKT-10421",
+        "PDOC-0001",
+        "PDOC-0002"
+      ],
+      "top3DocumentIds": [
+        "TKT-10421",
+        "TKT-10421",
+        "PDOC-0001"
+      ],
+      "recallAt3": 0.5,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "TKT-10421",
+          "is_summary": false,
+          "title": "Brightwave webhook delivery timeouts"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 65,
+        "generationMs": 18551,
+        "totalMs": 18617
+      },
+      "answerExcerpt": "Brightwave encountered webhook delivery issues during their catalog synchronization in TKT-10421 due to intermittent ...",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-006",
+      "category": "semantic_alternate_phrasing",
+      "description": "Semantic matching without exact ticket ID: \"school administrative console displaying outdated metrics\"",
+      "question": "Why is the school administrative console displaying outdated ticket metrics?",
+      "user": "Priya Raman (emp_001)",
+      "audience": "internal",
+      "expectedDocumentIds": [
+        "TKT-10467"
+      ],
+      "retrievedDocumentIds": [
+        "TKT-10467",
+        "PDOC-0001",
+        "TKT-10467",
+        "PDOC-0001"
+      ],
+      "top3DocumentIds": [
+        "TKT-10467",
+        "PDOC-0001",
+        "TKT-10467"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "TKT-10467",
+          "is_summary": false,
+          "title": "Lumenfield API rate-limit errors"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 47,
+        "generationMs": 16024,
+        "totalMs": 16072
+      },
+      "answerExcerpt": "The school administrative console is displaying outdated ticket metrics because the internal tool built by Lumenfield...",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-007",
+      "category": "permission_restricted_tenant",
+      "description": "Marcus Webb (Harborpine & Lumenfield) attempting to query Brightwave ticket TKT-10421",
+      "question": "What issue was reported in ticket TKT-10421?",
+      "user": "Marcus Webb (emp_002)",
+      "audience": "internal",
+      "expectedDocumentIds": [],
+      "retrievedDocumentIds": [],
+      "top3DocumentIds": [],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 32,
+        "generationMs": 0,
+        "totalMs": 32
+      },
+      "answerExcerpt": "I couldn't find sufficient information available to you to answer this question.",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-008",
+      "category": "permission_restricted_sensitivity",
+      "description": "Priya Raman attempting to query restricted Q3 security vulnerability penetration test audit",
+      "question": "What were the critical findings in the Q3 security vulnerability penetration test audit?",
+      "user": "Priya Raman (emp_001)",
+      "audience": "internal",
+      "expectedDocumentIds": [],
+      "retrievedDocumentIds": [
+        "TKT-10467",
+        "TKT-10421",
+        "TKT-10421",
+        "PDOC-0001"
+      ],
+      "top3DocumentIds": [
+        "TKT-10467",
+        "TKT-10421",
+        "TKT-10421"
+      ],
+      "recallAt3": 0,
+      "recallAt4": 0,
+      "citations": [],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 42,
+        "generationMs": 9771,
+        "totalMs": 9813
+      },
+      "answerExcerpt": "I do not have sufficient evidence in the provided documents to answer this question.",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-009",
+      "category": "customer_blocked_internal_only",
+      "description": "Customer Hannah Brooks attempting to access internal webhook dispatcher runbook PDOC-0001",
+      "question": "How do I use the internal dispatcher CLI to manually re-enqueue failed webhook events?",
+      "user": "Hannah Brooks (cu_001)",
+      "audience": "customer",
+      "expectedDocumentIds": [],
+      "retrievedDocumentIds": [
+        "PDOC-0002",
+        "PDOC-0002",
+        "PDOC-0003",
+        "PDOC-0004"
+      ],
+      "top3DocumentIds": [
+        "PDOC-0002",
+        "PDOC-0002",
+        "PDOC-0003"
+      ],
+      "recallAt3": 0,
+      "recallAt4": 0,
+      "citations": [],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 55,
+        "generationMs": 10264,
+        "totalMs": 10320
+      },
+      "answerExcerpt": "I do not have sufficient evidence in the provided documents to answer this question.",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-010",
+      "category": "insufficient_evidence_unsupported",
+      "description": "Unsupported question about personal information of company executive",
+      "question": "What is the personal mobile phone number and home address of CloudDesk CEO Jane Doe?",
+      "user": "Elena Duarte (emp_003)",
+      "audience": "internal",
+      "expectedDocumentIds": [],
+      "retrievedDocumentIds": [
+        "PDOC-0002",
+        "PDOC-0002",
+        "PDOC-0003",
+        "PDOC-0003"
+      ],
+      "top3DocumentIds": [
+        "PDOC-0002",
+        "PDOC-0002",
+        "PDOC-0003"
+      ],
+      "recallAt3": 0,
+      "recallAt4": 0,
+      "citations": [],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 45,
+        "generationMs": 7724,
+        "totalMs": 7771
+      },
+      "answerExcerpt": "I do not have sufficient evidence in the provided documents to answer this question.",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-011",
+      "category": "conversational_followup",
+      "description": "Follow-up question with pronoun \"that timeout error\" lacking antecedent keywords (identifies baseline weakness)",
+      "question": "How do I fix that timeout error?",
+      "user": "Priya Raman (emp_001)",
+      "audience": "internal",
+      "expectedDocumentIds": [
+        "PDOC-0002"
+      ],
+      "retrievedDocumentIds": [
+        "TKT-10421",
+        "PDOC-0001",
+        "PDOC-0001",
+        "TKT-10421"
+      ],
+      "top3DocumentIds": [
+        "TKT-10421",
+        "PDOC-0001",
+        "PDOC-0001"
+      ],
+      "recallAt3": 0,
+      "recallAt4": 0,
+      "citations": [
+        {
+          "document_id": "TKT-10421",
+          "is_summary": false,
+          "title": "Brightwave webhook delivery timeouts"
+        }
+      ],
+      "citationValid": false,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": false,
+      "latencies": {
+        "retrievalMs": 36,
+        "generationMs": 29383,
+        "totalMs": 29420
+      },
+      "answerExcerpt": "To fix the timeout error (CD-WHK-504), you should follow the diagnostic workflow outlined in the documentation. Here ...",
+      "notes": "[SUBPHASE 4.4 TARGET] Pronoun query needs query condensation."
+    },
+    {
+      "id": "EVAL-012",
+      "category": "direct_factual_flow_limits",
+      "description": "Direct factual query on CloudDesk Flows maximum nesting depth and error CD-FLW-310",
+      "question": "What does error code CD-FLW-310 mean in CloudDesk Flows and what is the maximum supported nesting depth?",
+      "user": "Priya Raman (emp_001)",
+      "audience": "internal",
+      "expectedDocumentIds": [
+        "PDOC-0004"
+      ],
+      "retrievedDocumentIds": [
+        "PDOC-0004",
+        "PDOC-0004",
+        "PDOC-0001",
+        "PDOC-0003"
+      ],
+      "top3DocumentIds": [
+        "PDOC-0004",
+        "PDOC-0004",
+        "PDOC-0001"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "PDOC-0004",
+          "is_summary": false,
+          "title": "Flow Loop Limits"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 62,
+        "generationMs": 17546,
+        "totalMs": 17609
+      },
+      "answerExcerpt": "Error code CD-FLW-310 in CloudDesk Flows means that the chain or nesting depth of a flow has exceeded the supported l...",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-013",
+      "category": "cross_tenant_customer_isolation",
+      "description": "Customer Hannah Brooks (Brightwave) querying Harborpine ticket TKT-10533",
+      "question": "What error codes are affecting Harborpine Financial in ticket TKT-10533?",
+      "user": "Hannah Brooks (cu_001)",
+      "audience": "customer",
+      "expectedDocumentIds": [],
+      "retrievedDocumentIds": [],
+      "top3DocumentIds": [],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 45,
+        "generationMs": 0,
+        "totalMs": 45
+      },
+      "answerExcerpt": "I couldn't find sufficient information available to you to answer this question.",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-014",
+      "category": "direct_factual_enterprise_quota",
+      "description": "Query on Enterprise tier API rate limit and rate limit error code from PDOC-0003",
+      "question": "What is the API rate limit for the Enterprise plan and what error code indicates that a rate limit has been exceeded?",
+      "user": "Tomas Eriksen (emp_004)",
+      "audience": "internal",
+      "expectedDocumentIds": [
+        "PDOC-0003"
+      ],
+      "retrievedDocumentIds": [
+        "PDOC-0003",
+        "PDOC-0003",
+        "PDOC-0004",
+        "PDOC-0004"
+      ],
+      "top3DocumentIds": [
+        "PDOC-0003",
+        "PDOC-0003",
+        "PDOC-0004"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [
+        {
+          "document_id": "PDOC-0003",
+          "is_summary": false,
+          "title": "API Rate Limits"
+        }
+      ],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 56,
+        "generationMs": 16132,
+        "totalMs": 16188
+      },
+      "answerExcerpt": "The API rate limit for the Enterprise plan is 1,000 requests per minute. The error code that indicates a rate limit h...",
+      "notes": ""
+    },
+    {
+      "id": "EVAL-015",
+      "category": "customer_persona_ticket_boundary",
+      "description": "Customer Hannah Brooks querying own ticket TKT-10421; documents the SQL group boundary where raw ticket chunks only have support groups",
+      "question": "What is the status of ticket TKT-10421?",
+      "user": "Hannah Brooks (cu_001)",
+      "audience": "customer",
+      "expectedDocumentIds": [],
+      "retrievedDocumentIds": [],
+      "top3DocumentIds": [],
+      "recallAt3": 1,
+      "recallAt4": 1,
+      "citations": [],
+      "citationValid": true,
+      "groundednessPassed": true,
+      "behaviorPassed": true,
+      "overallPassed": true,
+      "latencies": {
+        "retrievalMs": 36,
+        "generationMs": 0,
+        "totalMs": 36
+      },
+      "answerExcerpt": "I couldn't find sufficient information available to you to answer this question.",
+      "notes": "[OBSERVATION 1] Customer persona ticket query boundary."
+    }
+  ]
+}

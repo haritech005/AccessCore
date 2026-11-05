@@ -3,10 +3,12 @@ import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
 import { config } from '../config';
 import { retrievalService } from './retrievalService';
+import { hybridRetrievalService } from './hybridRetrievalService';
+import { fullTextSearchService } from './fullTextSearchService';
 import { authorizationService } from './authorizationService';
 import { disclosurePolicyService, PermittedEvidenceItem } from './disclosurePolicyService';
 import { postGenerationValidator, POLICY_VIOLATION_MESSAGE } from './postGenerationValidator';
-import { Citation, RAGAnswerResponse, RetrievedChunk } from '../types/rag';
+import { Citation, RAGAnswerResponse, RetrievedChunk, RetrievalStrategy } from '../types/rag';
 import { AuthenticatedUser } from '../types/identity';
 import { AudienceMode } from '../types/policy';
 import { AppError } from '../middleware/errorHandler';
@@ -22,6 +24,10 @@ export interface RAGQueryOptions {
   user?: AuthenticatedUser;
   model?: string;
   audience?: AudienceMode | string;
+  retrieval_strategy?: RetrievalStrategy;
+  vector_candidates?: number;
+  fts_candidates?: number;
+  rrf_k?: number;
 }
 
 export const INSUFFICIENT_EVIDENCE_MESSAGE =
@@ -235,7 +241,20 @@ ${items}
    */
   async answerQuestion(options: RAGQueryOptions): Promise<RAGAnswerResponse> {
     const totalStart = Date.now();
-    const { question, top_k = 4, min_similarity = 0.40, tenant_scope, user_groups, user, model, audience } = options;
+    const {
+      question,
+      top_k = 4,
+      min_similarity = 0.40,
+      tenant_scope,
+      user_groups,
+      user,
+      model,
+      audience,
+      retrieval_strategy = 'hybrid',
+      vector_candidates = 20,
+      fts_candidates = 20,
+      rrf_k = 60,
+    } = options;
 
     if (!question || typeof question !== 'string' || question.trim().length === 0) {
       throw new AppError('Question must be a non-empty string.', 400, 'INVALID_QUESTION');
@@ -252,19 +271,55 @@ ${items}
       effectiveAudience = norm === 'customer' || norm === 'customer_facing' ? 'customer' : 'internal';
     }
 
-    // 1. Semantic Vector Retrieval (with Phase 2 server-side authorization enforcement)
+    // 1. Evidence Retrieval (Vector, Full-Text, or Hybrid Fusion)
     const retrievalStart = Date.now();
-    const retrievalResult = await retrievalService.retrieveChunks({
-      query: cleanQuestion,
-      top_k,
-      min_similarity,
-      tenant_scope,
-      user_groups,
-      user,
-    });
-    const retrievalLatency = Date.now() - retrievalStart;
+    let retrievedChunks: RetrievedChunk[] = [];
+    let hasBlockedTopMatch = false;
 
-    let retrievedChunks = retrievalResult.chunks;
+    if (retrieval_strategy === 'vector') {
+      const vRes = await retrievalService.retrieveChunks({
+        query: cleanQuestion,
+        top_k,
+        min_similarity,
+        tenant_scope,
+        user_groups,
+        user,
+      });
+      retrievedChunks = vRes.chunks;
+      hasBlockedTopMatch = Boolean(vRes.has_blocked_top_match);
+    } else if (retrieval_strategy === 'fts') {
+      const fRes = await fullTextSearchService.searchChunks({
+        query: cleanQuestion,
+        top_k,
+        tenant_scope,
+        user_groups,
+        user,
+        audience: effectiveAudience,
+      });
+      retrievedChunks = fRes.chunks.map((c) => ({
+        ...c,
+        similarity: 0.5,
+        cosine_distance: 0.5,
+      }));
+      hasBlockedTopMatch = Boolean(fRes.has_blocked_top_match);
+    } else {
+      // Default in Phase 4: Hybrid Retrieval with Reciprocal Rank Fusion
+      const hRes = await hybridRetrievalService.retrieveHybridChunks({
+        query: cleanQuestion,
+        top_k,
+        min_similarity,
+        vector_candidates,
+        fts_candidates,
+        rrf_k,
+        tenant_scope,
+        user_groups,
+        user,
+        audience: effectiveAudience,
+      });
+      retrievedChunks = hRes.chunks;
+      hasBlockedTopMatch = Boolean(hRes.has_blocked_top_match);
+    }
+    const retrievalLatency = Date.now() - retrievalStart;
 
     // Defense-in-depth: Secondary Phase 2 security validation on all retrieved chunks before LLM prompt assembly
     if (user && retrievedChunks.length > 0) {
@@ -285,7 +340,7 @@ ${items}
       // Differentiate: Did retrieval return 0 chunks because authorization filtered out restricted documents,
       // or because there is genuinely no relevant indexed evidence anywhere in the system?
       const isRestricted =
-        retrievalResult.has_blocked_top_match ||
+        hasBlockedTopMatch ||
         (await retrievalService.hasBlockedMatchingEvidence({
           query: cleanQuestion,
           min_similarity,

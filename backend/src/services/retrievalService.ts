@@ -2,11 +2,19 @@ import { query } from '../db';
 import { embeddingService } from './embeddingService';
 import { authorizationService } from './authorizationService';
 import { fullTextSearchService } from './fullTextSearchService';
-import { RetrievalQuery, RetrievedChunk, FullTextQuery, FullTextSearchResult } from '../types/rag';
+import { hybridRetrievalService } from './hybridRetrievalService';
+import {
+  RetrievalQuery,
+  RetrievedChunk,
+  FullTextQuery,
+  FullTextSearchResult,
+  HybridQueryOptions,
+  HybridRetrievalResult,
+} from '../types/rag';
 import { AuthenticatedUser, SensitivityLevel } from '../types/identity';
 import { AppError } from '../middleware/errorHandler';
 
-export { fullTextSearchService };
+export { fullTextSearchService, hybridRetrievalService };
 
 export interface RetrievalResult {
   query: string;
@@ -460,6 +468,13 @@ export class RetrievalService {
    */
   async searchFullText(options: FullTextQuery): Promise<FullTextSearchResult> {
     return fullTextSearchService.searchChunks(options);
+  }
+
+  /**
+   * Delegates to hybridRetrievalService for fused dense vector and sparse lexical retrieval via RRF.
+   */
+  async retrieveHybrid(options: HybridQueryOptions): Promise<HybridRetrievalResult> {
+    return hybridRetrievalService.retrieveHybridChunks(options);
   }
 }
 

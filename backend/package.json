@@ -32,7 +32,9 @@
     "validation:test": "tsx src/services/testAnswerAndCitationValidation.ts",
     "test:disclosure:security": "tsx src/services/testDisclosureSecuritySuite.ts",
     "fts:test": "tsx src/services/testFullTextSearch.ts",
-    "eval:baseline": "tsx src/evaluation/runBaselineEval.ts"
+    "hybrid:test": "tsx src/services/testHybridRetrieval.ts",
+    "eval:baseline": "tsx src/evaluation/runBaselineEval.ts",
+    "eval:hybrid": "tsx src/evaluation/runHybridEval.ts"
   },
   "keywords": [
     "accesscore",

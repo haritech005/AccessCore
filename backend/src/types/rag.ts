@@ -38,6 +38,44 @@ export interface FullTextSearchResult {
   has_blocked_top_match?: boolean;
 }
 
+export interface HybridChunk extends RetrievedChunk {
+  rrf_score: number;
+  vector_rank?: number;
+  fts_rank?: number;
+  matched_by: 'vector' | 'fts' | 'both';
+  headline?: string;
+}
+
+export interface HybridQueryOptions {
+  query: string;
+  top_k?: number;
+  vector_candidates?: number;
+  fts_candidates?: number;
+  rrf_k?: number;
+  min_similarity?: number;
+  tenant_scope?: string[];
+  user_groups?: string[];
+  user?: AuthenticatedUser;
+  audience?: AudienceMode | string;
+}
+
+export interface HybridRetrievalResult {
+  query: string;
+  chunks: HybridChunk[];
+  total_retrieved: number;
+  vector_count: number;
+  fts_count: number;
+  latency_ms: {
+    vector: number;
+    fts: number;
+    fusion: number;
+    total: number;
+  };
+  has_blocked_top_match?: boolean;
+}
+
+export type RetrievalStrategy = 'vector' | 'fts' | 'hybrid';
+
 export interface Citation {
   document_id: string;
   title: string;
