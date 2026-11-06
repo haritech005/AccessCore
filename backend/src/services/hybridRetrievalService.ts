@@ -1,6 +1,7 @@
 import { retrievalService } from './retrievalService';
 import { fullTextSearchService } from './fullTextSearchService';
 import { authorizationService } from './authorizationService';
+import { sanitizeRetrievalOptions, DEFAULT_RETRIEVAL_CONFIG } from '../config/retrievalConfig';
 import {
   HybridQueryOptions,
   HybridRetrievalResult,
@@ -37,11 +38,6 @@ export class HybridRetrievalService {
     const totalStart = Date.now();
     const {
       query: userQuery,
-      top_k = 4,
-      vector_candidates = HybridRetrievalService.DEFAULT_CANDIDATE_POOL,
-      fts_candidates = HybridRetrievalService.DEFAULT_CANDIDATE_POOL,
-      rrf_k = HybridRetrievalService.DEFAULT_RRF_K,
-      min_similarity = 0.35,
       tenant_scope,
       user_groups,
       user,
@@ -57,7 +53,18 @@ export class HybridRetrievalService {
       throw new AppError('Hybrid retrieval query exceeds maximum allowed length of 2000 characters.', 400, 'QUERY_TOO_LONG');
     }
 
-    // 0. Account Status Guard
+    // 0. Sanitize and bound retrieval parameters against safe operational bounds
+    const config = sanitizeRetrievalOptions({
+      top_k: options.top_k,
+      vector_candidates: options.vector_candidates,
+      fts_candidates: options.fts_candidates,
+      min_similarity: options.min_similarity,
+      rrf_k: options.rrf_k,
+      diversity_threshold: options.diversity_threshold,
+      max_chunks_per_doc: options.max_chunks_per_doc,
+    });
+
+    // Account Status Guard
     if (user && user.status !== 'active') {
       return {
         query: cleanQuery,
@@ -69,23 +76,19 @@ export class HybridRetrievalService {
       };
     }
 
-    const effectiveTopK = Math.min(Math.max(1, top_k), 50);
-    const effectiveVectorPool = Math.min(Math.max(effectiveTopK, vector_candidates), 50);
-    const effectiveFtsPool = Math.min(Math.max(effectiveTopK, fts_candidates), 50);
-
     // 1. Parallel Execution: Run Dense Vector Search and Sparse Full-Text Search concurrently
     const [vectorResult, ftsResult] = await Promise.all([
       retrievalService.retrieveChunks({
         query: cleanQuery,
-        top_k: effectiveVectorPool,
-        min_similarity,
+        top_k: config.vector_candidates,
+        min_similarity: config.min_similarity,
         tenant_scope,
         user_groups,
         user,
       }),
       fullTextSearchService.searchChunks({
         query: cleanQuery,
-        top_k: effectiveFtsPool,
+        top_k: config.fts_candidates,
         tenant_scope,
         user_groups,
         user,
@@ -121,8 +124,10 @@ export class HybridRetrievalService {
     const fusedChunks = this.fuseCandidates(
       vectorResult.chunks,
       ftsResult.chunks,
-      rrf_k,
-      effectiveTopK
+      config.rrf_k,
+      config.top_k,
+      config.diversity_threshold,
+      config.max_chunks_per_doc
     );
     const fusionLatency = Date.now() - fusionStart;
 
@@ -169,8 +174,10 @@ export class HybridRetrievalService {
   public fuseCandidates(
     vectorChunks: RetrievedChunk[],
     ftsChunks: FullTextChunk[],
-    rrfK: number = HybridRetrievalService.DEFAULT_RRF_K,
-    topK: number = 4
+    rrfK: number = DEFAULT_RETRIEVAL_CONFIG.rrf_k,
+    topK: number = DEFAULT_RETRIEVAL_CONFIG.top_k,
+    diversityThreshold: number = DEFAULT_RETRIEVAL_CONFIG.diversity_threshold,
+    maxChunksPerDoc: number = DEFAULT_RETRIEVAL_CONFIG.max_chunks_per_doc
   ): HybridChunk[] {
     const candidateMap = new Map<string, {
       chunk: RetrievedChunk | FullTextChunk;
@@ -267,14 +274,14 @@ export class HybridRetrievalService {
     const deferred: HybridChunk[] = [];
 
     const topScore = fusedList[0]?.rrf_score || 0;
-    const relativeThreshold = topScore * 0.70;
-    const MAX_CHUNKS_PER_DOC = Math.max(2, Math.floor(topK / 2));
+    const relativeThreshold = topScore * diversityThreshold;
+    const effectiveMaxChunksPerDoc = Math.max(1, maxChunksPerDoc);
 
     for (const item of fusedList) {
       const isCompetitive = (item.rrf_score || 0) >= relativeThreshold;
       const count = docCounts.get(item.document_id) || 0;
 
-      if (isCompetitive && count < MAX_CHUNKS_PER_DOC) {
+      if (isCompetitive && count < effectiveMaxChunksPerDoc) {
         selected.push(item);
         docCounts.set(item.document_id, count + 1);
         if (selected.length === topK) break;

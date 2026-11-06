@@ -1,0 +1,347 @@
+[
+  {
+    "dimension": "Candidate Pool Sizing",
+    "configLabel": "Pool = 10 (Vector: 10, FTS: 10)",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 10,
+      "fts_candidates": 10,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 47,
+      "meanRetrievalLatencyMs": 56,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Candidate Pool Sizing",
+    "configLabel": "Pool = 20 (Vector: 20, FTS: 20) [Current Baseline]",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 44,
+      "meanRetrievalLatencyMs": 45,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Candidate Pool Sizing",
+    "configLabel": "Pool = 35 (Vector: 35, FTS: 35)",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 35,
+      "fts_candidates": 35,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 46,
+      "meanRetrievalLatencyMs": 49,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Final Top-K Selection",
+    "configLabel": "Top-K = 3",
+    "params": {
+      "top_k": 3,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "93.3%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "76.7%",
+      "eval005Recall": "50%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 47,
+      "meanRetrievalLatencyMs": 48,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Final Top-K Selection",
+    "configLabel": "Top-K = 4 [Current Baseline]",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 53,
+      "meanRetrievalLatencyMs": 55,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Final Top-K Selection",
+    "configLabel": "Top-K = 5",
+    "params": {
+      "top_k": 5,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 64,
+      "meanRetrievalLatencyMs": 74,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "RRF Constant (k)",
+    "configLabel": "RRF k = 20 (Strong Top-Rank Weighting)",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 20,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 77,
+      "meanRetrievalLatencyMs": 79,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "RRF Constant (k)",
+    "configLabel": "RRF k = 60 (Standard IR Smoothing) [Current Baseline]",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 57,
+      "meanRetrievalLatencyMs": 57,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "RRF Constant (k)",
+    "configLabel": "RRF k = 100 (Dampened Rank Weighting)",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 100,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 46,
+      "meanRetrievalLatencyMs": 47,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Document Diversity Threshold",
+    "configLabel": "Threshold = 0.50 (Aggressive Diversity)",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.5,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 46,
+      "meanRetrievalLatencyMs": 47,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Document Diversity Threshold",
+    "configLabel": "Threshold = 0.70 (Balanced Competitive) [Current Baseline]",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 43,
+      "meanRetrievalLatencyMs": 46,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Document Diversity Threshold",
+    "configLabel": "Threshold = 0.85 (Strict Dominant Doc Priority)",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.85,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 42,
+      "meanRetrievalLatencyMs": 45,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Operational Presets",
+    "configLabel": "Preset: Low Latency",
+    "params": {
+      "top_k": 3,
+      "vector_candidates": 10,
+      "fts_candidates": 10,
+      "min_similarity": 0.4,
+      "rrf_k": 40,
+      "diversity_threshold": 0.75,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "93.3%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "76.7%",
+      "eval005Recall": "50%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 41,
+      "meanRetrievalLatencyMs": 44,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Operational Presets",
+    "configLabel": "Preset: Balanced (Production Default)",
+    "params": {
+      "top_k": 4,
+      "vector_candidates": 20,
+      "fts_candidates": 20,
+      "min_similarity": 0.35,
+      "rrf_k": 60,
+      "diversity_threshold": 0.7,
+      "max_chunks_per_doc": 2
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 49,
+      "meanRetrievalLatencyMs": 50,
+      "meanFusionLatencyMs": 0
+    }
+  },
+  {
+    "dimension": "Operational Presets",
+    "configLabel": "Preset: High Recall",
+    "params": {
+      "top_k": 6,
+      "vector_candidates": 35,
+      "fts_candidates": 35,
+      "min_similarity": 0.3,
+      "rrf_k": 60,
+      "diversity_threshold": 0.65,
+      "max_chunks_per_doc": 3
+    },
+    "metrics": {
+      "overallPassRate": "100.0%",
+      "meanRecallAt3": "76.7%",
+      "meanRecallAt4": "80.0%",
+      "eval005Recall": "100%",
+      "eval011Recall": "100%",
+      "medianRetrievalLatencyMs": 44,
+      "meanRetrievalLatencyMs": 45,
+      "meanFusionLatencyMs": 0
+    }
+  }
+]

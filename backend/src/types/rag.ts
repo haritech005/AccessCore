@@ -53,6 +53,8 @@ export interface HybridQueryOptions {
   fts_candidates?: number;
   rrf_k?: number;
   min_similarity?: number;
+  diversity_threshold?: number;
+  max_chunks_per_doc?: number;
   tenant_scope?: string[];
   user_groups?: string[];
   user?: AuthenticatedUser;

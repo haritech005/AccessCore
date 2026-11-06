@@ -9,6 +9,7 @@ import { authorizationService } from './authorizationService';
 import { disclosurePolicyService, PermittedEvidenceItem } from './disclosurePolicyService';
 import { postGenerationValidator, POLICY_VIOLATION_MESSAGE } from './postGenerationValidator';
 import { queryCondensationService } from './queryCondensationService';
+import { sanitizeRetrievalOptions, DEFAULT_RETRIEVAL_CONFIG } from '../config/retrievalConfig';
 import { Citation, RAGAnswerResponse, RetrievedChunk, RetrievalStrategy, ChatMessageTurn } from '../types/rag';
 import { AuthenticatedUser } from '../types/identity';
 import { AudienceMode } from '../types/policy';
@@ -31,6 +32,8 @@ export interface RAGQueryOptions {
   vector_candidates?: number;
   fts_candidates?: number;
   rrf_k?: number;
+  diversity_threshold?: number;
+  max_chunks_per_doc?: number;
 }
 
 export const INSUFFICIENT_EVIDENCE_MESSAGE =
@@ -248,18 +251,23 @@ ${items}
       question,
       chat_history,
       condense_query = true,
-      top_k = 4,
-      min_similarity = 0.40,
       tenant_scope,
       user_groups,
       user,
       model,
       audience,
       retrieval_strategy = 'hybrid',
-      vector_candidates = 20,
-      fts_candidates = 20,
-      rrf_k = 60,
     } = options;
+
+    const retConfig = sanitizeRetrievalOptions({
+      top_k: options.top_k,
+      vector_candidates: options.vector_candidates,
+      fts_candidates: options.fts_candidates,
+      min_similarity: options.min_similarity,
+      rrf_k: options.rrf_k,
+      diversity_threshold: options.diversity_threshold,
+      max_chunks_per_doc: options.max_chunks_per_doc,
+    });
 
     if (!question || typeof question !== 'string' || question.trim().length === 0) {
       throw new AppError('Question must be a non-empty string.', 400, 'INVALID_QUESTION');
@@ -300,8 +308,8 @@ ${items}
     if (retrieval_strategy === 'vector') {
       const vRes = await retrievalService.retrieveChunks({
         query: effectiveSearchQuery,
-        top_k,
-        min_similarity,
+        top_k: retConfig.top_k,
+        min_similarity: retConfig.min_similarity,
         tenant_scope,
         user_groups,
         user,
@@ -311,7 +319,7 @@ ${items}
     } else if (retrieval_strategy === 'fts') {
       const fRes = await fullTextSearchService.searchChunks({
         query: effectiveSearchQuery,
-        top_k,
+        top_k: retConfig.top_k,
         tenant_scope,
         user_groups,
         user,
@@ -327,11 +335,13 @@ ${items}
       // Default in Phase 4: Hybrid Retrieval with Reciprocal Rank Fusion
       const hRes = await hybridRetrievalService.retrieveHybridChunks({
         query: effectiveSearchQuery,
-        top_k,
-        min_similarity,
-        vector_candidates,
-        fts_candidates,
-        rrf_k,
+        top_k: retConfig.top_k,
+        min_similarity: retConfig.min_similarity,
+        vector_candidates: retConfig.vector_candidates,
+        fts_candidates: retConfig.fts_candidates,
+        rrf_k: retConfig.rrf_k,
+        diversity_threshold: retConfig.diversity_threshold,
+        max_chunks_per_doc: retConfig.max_chunks_per_doc,
         tenant_scope,
         user_groups,
         user,
@@ -364,7 +374,7 @@ ${items}
         hasBlockedTopMatch ||
         (await retrievalService.hasBlockedMatchingEvidence({
           query: effectiveSearchQuery,
-          min_similarity,
+          min_similarity: retConfig.min_similarity,
           tenant_scope,
           user_groups,
           user,
