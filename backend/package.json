@@ -37,7 +37,8 @@
     "config:tune:test": "tsx src/services/testRetrievalConfig.ts",
     "eval:baseline": "tsx src/evaluation/runBaselineEval.ts",
     "eval:hybrid": "tsx src/evaluation/runHybridEval.ts",
-    "eval:tune": "tsx src/evaluation/runTuningExperiments.ts"
+    "eval:tune": "tsx src/evaluation/runTuningExperiments.ts",
+    "eval:reranking": "tsx src/evaluation/evaluateReranking.ts"
   },
   "keywords": [
     "accesscore",

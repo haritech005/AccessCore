@@ -1,0 +1,42 @@
+{
+  "timestamp": "2026-11-06T09:42:34.424Z",
+  "totalCases": 15,
+  "casesWithTargets": 9,
+  "meanReciprocalRank": 0.9444,
+  "poolRecallMean": 1,
+  "top4RecallMean": 1,
+  "rankingDeficitCases": [],
+  "rerankerJustified": false,
+  "justification": "Zero ranking deficits identified across benchmark. Relevant chunks are consistently positioned at Rank #1-#2 by dense vector + sparse FTS + RRF. An external neural cross-encoder would add ~200-400ms latency without providing any recall improvement.",
+  "latencyComparison": {
+    "currentRrfLatencyMs": 45,
+    "estimatedCrossEncoderLatencyMs": 250,
+    "estimatedSlowdownFactor": "5.5x slower retrieval stage (adds +200ms per query)"
+  },
+  "recommendations": {
+    "recommendedAction": "DO NOT adopt an active reranker model in production at this stage. Keep RRF hybrid retrieval as the primary engine. Document reranker architecture for future scale (100k+ chunks).",
+    "suggestedLocalModelsIfRequiredInFuture": [
+      {
+        "name": "cross-encoder/ms-marco-MiniLM-L-6-v2",
+        "size": "~80 MB",
+        "runtime": "Node.js via ONNX Runtime (@xenova/transformers)",
+        "pros": "Ultra-lightweight, runs in pure Node.js without Python, lowest latency (~50-80ms CPU).",
+        "cons": "English only, 512 token truncation context."
+      },
+      {
+        "name": "BAAI/bge-reranker-base",
+        "size": "~560 MB",
+        "runtime": "Local Python microservice or ONNX runtime",
+        "pros": "Industry gold standard, state-of-the-art accuracy on MTEB reranking benchmarks.",
+        "cons": "Heavier (~560MB), requires 200-300ms on CPU, best with GPU acceleration."
+      },
+      {
+        "name": "jinaai/jina-reranker-v1-tiny-en",
+        "size": "~130 MB",
+        "runtime": "Local ONNX runtime",
+        "pros": "Long context support (up to 8,192 tokens), fast execution (~70ms).",
+        "cons": "Slightly lower accuracy than BGE on short factual queries."
+      }
+    ]
+  }
+}
