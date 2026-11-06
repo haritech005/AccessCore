@@ -3,9 +3,11 @@ import path from 'path';
 import { EVALUATION_DATASET, EvaluationCase } from './dataset';
 import { authService } from '../services/authService';
 import { hybridRetrievalService } from '../services/hybridRetrievalService';
+import { queryCondensationService } from '../services/queryCondensationService';
 import { ragService } from '../services/ragService';
 import { closePool } from '../db';
 import { EvaluationCaseResult, BaselineEvaluationSummary } from './runBaselineEval';
+import { ChatMessageTurn } from '../types/rag';
 
 export async function runHybridEvaluation(): Promise<BaselineEvaluationSummary> {
   console.log('================================================================================');
@@ -29,9 +31,28 @@ export async function runHybridEvaluation(): Promise<BaselineEvaluationSummary> 
       throw new Error(`Evaluation identity '${testCase.userId}' could not be resolved from database.`);
     }
 
+    // Prepare conversational history if test case is a conversational follow-up
+    const chatHistory: ChatMessageTurn[] | undefined =
+      testCase.isConversationalFollowup && testCase.conversationContext
+        ? [
+            { role: 'user', content: testCase.conversationContext.priorQuestion },
+            { role: 'assistant', content: testCase.conversationContext.priorAnswerExcerpt },
+          ]
+        : undefined;
+
+    let queryForRetrieval = testCase.question;
+    if (chatHistory && chatHistory.length > 0) {
+      const cond = await queryCondensationService.condenseQuery({
+        question: testCase.question,
+        chat_history: chatHistory,
+      });
+      queryForRetrieval = cond.condensed_query;
+      console.log(`  [Condensation] "${testCase.question}" -> "${queryForRetrieval}" (${cond.latency_ms}ms)`);
+    }
+
     // 1. Direct Hybrid Retrieval Stage Measurement
     const retRes = await hybridRetrievalService.retrieveHybridChunks({
-      query: testCase.question,
+      query: queryForRetrieval,
       user,
       top_k: 4,
       vector_candidates: 20,
@@ -66,6 +87,7 @@ export async function runHybridEvaluation(): Promise<BaselineEvaluationSummary> 
     // 2. Full RAG Answer Generation Measurement with Hybrid Retrieval
     const ragRes = await ragService.answerQuestion({
       question: testCase.question,
+      chat_history: chatHistory,
       user,
       audience: testCase.audience,
       top_k: 4,

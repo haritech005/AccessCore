@@ -1,19 +1,19 @@
 {
-  "timestamp": "2026-11-05T07:00:46.629Z",
+  "timestamp": "2026-11-05T11:40:13.045Z",
   "totalCases": 15,
-  "overallPassedCount": 14,
-  "overallPassRate": "93.3%",
-  "meanRecallAt3": "70.0%",
-  "meanRecallAt4": "73.0%",
-  "citationValidityRate": "93.3%",
+  "overallPassedCount": 15,
+  "overallPassRate": "100.0%",
+  "meanRecallAt3": "77.0%",
+  "meanRecallAt4": "80.0%",
+  "citationValidityRate": "100.0%",
   "groundednessComplianceRate": "100.0%",
   "latency": {
-    "medianRetrievalMs": 47,
-    "meanRetrievalMs": 51,
-    "medianGenerationMs": 14052,
-    "meanGenerationMs": 12222,
-    "medianTotalMs": 14104,
-    "meanTotalMs": 12275
+    "medianRetrievalMs": 68,
+    "meanRetrievalMs": 72,
+    "medianGenerationMs": 16119,
+    "meanGenerationMs": 16445,
+    "medianTotalMs": 16174,
+    "meanTotalMs": 16617
   },
   "results": [
     {
@@ -51,9 +51,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 88,
-        "generationMs": 7615,
-        "totalMs": 7708
+        "retrievalMs": 93,
+        "generationMs": 23309,
+        "totalMs": 23409
       },
       "answerExcerpt": "Error code CD-WHK-504 means that CloudDesk sent an event to the customer's endpoint and did not receive a response wi...",
       "notes": ""
@@ -93,11 +93,11 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 51,
-        "generationMs": 14540,
-        "totalMs": 14593
+        "retrievalMs": 53,
+        "generationMs": 16119,
+        "totalMs": 16174
       },
-      "answerExcerpt": "The Starter plan allows 60 API requests per minute. This information can be found in [PDOC-0003] under the section \"W...",
+      "answerExcerpt": "The Starter plan allows 60 API requests per minute. This information can be found in [PDOC-0003] under the section \"P...",
       "notes": ""
     },
     {
@@ -135,11 +135,11 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 61,
-        "generationMs": 21734,
-        "totalMs": 21797
+        "retrievalMs": 57,
+        "generationMs": 26669,
+        "totalMs": 26727
       },
-      "answerExcerpt": "Ticket TKT-10467 describes API rate-limit errors reported by the support agent of Lumenfield Academy. The customer is...",
+      "answerExcerpt": "The issue described in ticket TKT-10467 is API rate-limit errors reported by the customer, Lumenfield Academy. The cu...",
       "notes": ""
     },
     {
@@ -177,9 +177,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 44,
-        "generationMs": 14052,
-        "totalMs": 14104
+        "retrievalMs": 69,
+        "generationMs": 11942,
+        "totalMs": 12034
       },
       "answerExcerpt": "Ticket TKT-10421 is about intermittent webhook delivery timeouts reported for the workspace of tenant ten_brightwave....",
       "notes": ""
@@ -220,9 +220,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 65,
-        "generationMs": 18551,
-        "totalMs": 18617
+        "retrievalMs": 77,
+        "generationMs": 24067,
+        "totalMs": 24145
       },
       "answerExcerpt": "Brightwave encountered webhook delivery issues during their catalog synchronization in TKT-10421 due to intermittent ...",
       "notes": ""
@@ -262,11 +262,11 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 47,
-        "generationMs": 16024,
-        "totalMs": 16072
+        "retrievalMs": 58,
+        "generationMs": 27678,
+        "totalMs": 27737
       },
-      "answerExcerpt": "The school administrative console is displaying outdated ticket metrics because the internal tool built by Lumenfield...",
+      "answerExcerpt": "The school administrative console, which is built by Lumenfield, is displaying outdated ticket metrics. This issue st...",
       "notes": ""
     },
     {
@@ -287,9 +287,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 32,
+        "retrievalMs": 45,
         "generationMs": 0,
-        "totalMs": 32
+        "totalMs": 45
       },
       "answerExcerpt": "I couldn't find sufficient information available to you to answer this question.",
       "notes": ""
@@ -321,9 +321,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 42,
-        "generationMs": 9771,
-        "totalMs": 9813
+        "retrievalMs": 57,
+        "generationMs": 14272,
+        "totalMs": 14330
       },
       "answerExcerpt": "I do not have sufficient evidence in the provided documents to answer this question.",
       "notes": ""
@@ -355,9 +355,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 55,
-        "generationMs": 10264,
-        "totalMs": 10320
+        "retrievalMs": 63,
+        "generationMs": 13284,
+        "totalMs": 13348
       },
       "answerExcerpt": "I do not have sufficient evidence in the provided documents to answer this question.",
       "notes": ""
@@ -389,9 +389,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 45,
-        "generationMs": 7724,
-        "totalMs": 7771
+        "retrievalMs": 96,
+        "generationMs": 10280,
+        "totalMs": 10379
       },
       "answerExcerpt": "I do not have sufficient evidence in the provided documents to answer this question.",
       "notes": ""
@@ -407,36 +407,36 @@
         "PDOC-0002"
       ],
       "retrievedDocumentIds": [
-        "TKT-10421",
-        "PDOC-0001",
-        "PDOC-0001",
-        "TKT-10421"
-      ],
-      "top3DocumentIds": [
+        "PDOC-0002",
         "TKT-10421",
         "PDOC-0001",
         "PDOC-0001"
       ],
-      "recallAt3": 0,
-      "recallAt4": 0,
+      "top3DocumentIds": [
+        "PDOC-0002",
+        "TKT-10421",
+        "PDOC-0001"
+      ],
+      "recallAt3": 1,
+      "recallAt4": 1,
       "citations": [
         {
-          "document_id": "TKT-10421",
+          "document_id": "PDOC-0002",
           "is_summary": false,
-          "title": "Brightwave webhook delivery timeouts"
+          "title": "Webhooks Overview"
         }
       ],
-      "citationValid": false,
+      "citationValid": true,
       "groundednessPassed": true,
       "behaviorPassed": true,
-      "overallPassed": false,
+      "overallPassed": true,
       "latencies": {
-        "retrievalMs": 36,
-        "generationMs": 29383,
-        "totalMs": 29420
+        "retrievalMs": 77,
+        "generationMs": 26993,
+        "totalMs": 28537
       },
-      "answerExcerpt": "To fix the timeout error (CD-WHK-504), you should follow the diagnostic workflow outlined in the documentation. Here ...",
-      "notes": "[SUBPHASE 4.4 TARGET] Pronoun query needs query condensation."
+      "answerExcerpt": "Error code CD-WHK-504 indicates that CloudDesk sent an event to your endpoint and did not receive a response within 1...",
+      "notes": ""
     },
     {
       "id": "EVAL-012",
@@ -473,9 +473,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 62,
-        "generationMs": 17546,
-        "totalMs": 17609
+        "retrievalMs": 114,
+        "generationMs": 27369,
+        "totalMs": 27484
       },
       "answerExcerpt": "Error code CD-FLW-310 in CloudDesk Flows means that the chain or nesting depth of a flow has exceeded the supported l...",
       "notes": ""
@@ -498,9 +498,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 45,
+        "retrievalMs": 60,
         "generationMs": 0,
-        "totalMs": 45
+        "totalMs": 60
       },
       "answerExcerpt": "I couldn't find sufficient information available to you to answer this question.",
       "notes": ""
@@ -540,11 +540,11 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 56,
-        "generationMs": 16132,
-        "totalMs": 16188
+        "retrievalMs": 68,
+        "generationMs": 24694,
+        "totalMs": 24762
       },
-      "answerExcerpt": "The API rate limit for the Enterprise plan is 1,000 requests per minute. The error code that indicates a rate limit h...",
+      "answerExcerpt": "The API rate limit for the Enterprise plan is 1,000 requests per minute.\n\nThe error code that indicates a rate limit ...",
       "notes": ""
     },
     {
@@ -565,9 +565,9 @@
       "behaviorPassed": true,
       "overallPassed": true,
       "latencies": {
-        "retrievalMs": 36,
+        "retrievalMs": 91,
         "generationMs": 0,
-        "totalMs": 36
+        "totalMs": 91
       },
       "answerExcerpt": "I couldn't find sufficient information available to you to answer this question.",
       "notes": "[OBSERVATION 1] Customer persona ticket query boundary."

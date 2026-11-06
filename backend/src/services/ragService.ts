@@ -8,7 +8,8 @@ import { fullTextSearchService } from './fullTextSearchService';
 import { authorizationService } from './authorizationService';
 import { disclosurePolicyService, PermittedEvidenceItem } from './disclosurePolicyService';
 import { postGenerationValidator, POLICY_VIOLATION_MESSAGE } from './postGenerationValidator';
-import { Citation, RAGAnswerResponse, RetrievedChunk, RetrievalStrategy } from '../types/rag';
+import { queryCondensationService } from './queryCondensationService';
+import { Citation, RAGAnswerResponse, RetrievedChunk, RetrievalStrategy, ChatMessageTurn } from '../types/rag';
 import { AuthenticatedUser } from '../types/identity';
 import { AudienceMode } from '../types/policy';
 import { AppError } from '../middleware/errorHandler';
@@ -17,6 +18,8 @@ export { POLICY_VIOLATION_MESSAGE };
 
 export interface RAGQueryOptions {
   question: string;
+  chat_history?: ChatMessageTurn[];
+  condense_query?: boolean;
   top_k?: number;
   min_similarity?: number;
   tenant_scope?: string[];
@@ -243,6 +246,8 @@ ${items}
     const totalStart = Date.now();
     const {
       question,
+      chat_history,
+      condense_query = true,
       top_k = 4,
       min_similarity = 0.40,
       tenant_scope,
@@ -271,6 +276,22 @@ ${items}
       effectiveAudience = norm === 'customer' || norm === 'customer_facing' ? 'customer' : 'internal';
     }
 
+    // 0b. Conversational Query Condensation (multi-turn RAG)
+    let condensationLatency = 0;
+    let effectiveSearchQuery = cleanQuestion;
+    let wasCondensed = false;
+
+    if (chat_history && chat_history.length > 0 && condense_query !== false) {
+      const condRes = await queryCondensationService.condenseQuery({
+        question: cleanQuestion,
+        chat_history,
+        model,
+      });
+      effectiveSearchQuery = condRes.condensed_query;
+      wasCondensed = condRes.was_condensed;
+      condensationLatency = condRes.latency_ms;
+    }
+
     // 1. Evidence Retrieval (Vector, Full-Text, or Hybrid Fusion)
     const retrievalStart = Date.now();
     let retrievedChunks: RetrievedChunk[] = [];
@@ -278,7 +299,7 @@ ${items}
 
     if (retrieval_strategy === 'vector') {
       const vRes = await retrievalService.retrieveChunks({
-        query: cleanQuestion,
+        query: effectiveSearchQuery,
         top_k,
         min_similarity,
         tenant_scope,
@@ -289,7 +310,7 @@ ${items}
       hasBlockedTopMatch = Boolean(vRes.has_blocked_top_match);
     } else if (retrieval_strategy === 'fts') {
       const fRes = await fullTextSearchService.searchChunks({
-        query: cleanQuestion,
+        query: effectiveSearchQuery,
         top_k,
         tenant_scope,
         user_groups,
@@ -305,7 +326,7 @@ ${items}
     } else {
       // Default in Phase 4: Hybrid Retrieval with Reciprocal Rank Fusion
       const hRes = await hybridRetrievalService.retrieveHybridChunks({
-        query: cleanQuestion,
+        query: effectiveSearchQuery,
         top_k,
         min_similarity,
         vector_candidates,
@@ -342,7 +363,7 @@ ${items}
       const isRestricted =
         hasBlockedTopMatch ||
         (await retrievalService.hasBlockedMatchingEvidence({
-          query: cleanQuestion,
+          query: effectiveSearchQuery,
           min_similarity,
           tenant_scope,
           user_groups,
@@ -352,6 +373,8 @@ ${items}
       if (isRestricted) {
         return {
           question: cleanQuestion,
+          condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
+          was_condensed: wasCondensed,
           answer: UNAUTHORIZED_ACCESS_MESSAGE,
           citations: [],
           insufficient_evidence: false,
@@ -359,6 +382,7 @@ ${items}
           audience: effectiveAudience,
           retrieved_chunks: [],
           latency_ms: {
+            condensation: condensationLatency > 0 ? condensationLatency : undefined,
             retrieval: retrievalLatency,
             generation: 0,
             total: Date.now() - totalStart,
@@ -368,6 +392,8 @@ ${items}
 
       return {
         question: cleanQuestion,
+        condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
+        was_condensed: wasCondensed,
         answer: INSUFFICIENT_EVIDENCE_MESSAGE,
         citations: [],
         insufficient_evidence: true,
@@ -375,6 +401,7 @@ ${items}
         audience: effectiveAudience,
         retrieved_chunks: [],
         latency_ms: {
+          condensation: condensationLatency > 0 ? condensationLatency : undefined,
           retrieval: retrievalLatency,
           generation: 0,
           total: Date.now() - totalStart,
@@ -415,6 +442,8 @@ ${items}
     if (permittedEvidence.length === 0) {
       return {
         question: cleanQuestion,
+        condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
+        was_condensed: wasCondensed,
         answer: INSUFFICIENT_EVIDENCE_MESSAGE,
         citations: [],
         insufficient_evidence: true,
@@ -422,6 +451,7 @@ ${items}
         audience: effectiveAudience,
         retrieved_chunks: [],
         latency_ms: {
+          condensation: condensationLatency > 0 ? condensationLatency : undefined,
           retrieval: retrievalLatency,
           filtering: filterLatency,
           generation: 0,
@@ -432,6 +462,19 @@ ${items}
 
     // 3. Format Context and LangChain Prompt Template with Injection Boundary Delimiters
     const contextText = this.formatContext(permittedEvidence);
+
+    let dialogueContext = '';
+    if (chat_history && chat_history.length > 0) {
+      const recentHistory = chat_history
+        .slice(-6)
+        .map((t) => {
+          const roleLabel =
+            t.role === 'user' ? 'User' : t.role === 'assistant' ? 'Assistant' : 'System';
+          return `${roleLabel}: ${t.content.trim()}`;
+        })
+        .join('\n');
+      dialogueContext = `\n\nCONVERSATION HISTORY:\n${recentHistory}\n`;
+    }
 
     const systemPrompt = `You are AccessCore, an enterprise knowledge assistant for CloudDesk.
 
@@ -472,8 +515,7 @@ You may provide practical next steps when they help answer the question. Clearly
 
 If the question is unrelated to CloudDesk, asks about a document not present in the evidence, or cannot be answered from the available evidence, respond with: "I do not have sufficient evidence in the provided documents to answer this question."
 
-Use clear, concise, professional language. Answer the question directly and avoid unnecessary repetition.
-
+Use clear, concise, professional language. Answer the question directly and avoid unnecessary repetition.${dialogueContext}
 EVIDENCE CONTEXT:
 {context}
 
@@ -525,6 +567,8 @@ GROUNDED ANSWER:`;
     if (isInsufficient) {
       return {
         question: cleanQuestion,
+        condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
+        was_condensed: wasCondensed,
         answer: INSUFFICIENT_EVIDENCE_MESSAGE,
         citations: [],
         insufficient_evidence: true,
@@ -537,6 +581,7 @@ GROUNDED ANSWER:`;
           similarity: c.similarity,
         })),
         latency_ms: {
+          condensation: condensationLatency > 0 ? condensationLatency : undefined,
           retrieval: retrievalLatency,
           filtering: filterLatency,
           generation: generationLatency,
@@ -575,7 +620,7 @@ Never reveal internal employee IDs, internal diagnostic notes, dispatcher recove
           ],
           [
             'human',
-            `EVIDENCE CONTEXT:
+            `${dialogueContext}EVIDENCE CONTEXT:
 {context}
 
 USER QUESTION:
@@ -613,6 +658,8 @@ CORRECTED GROUNDED ANSWER:`
     if (!validationResult.valid) {
       return {
         question: cleanQuestion,
+        condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
+        was_condensed: wasCondensed,
         answer: POLICY_VIOLATION_MESSAGE,
         citations: [],
         insufficient_evidence: true,
@@ -625,6 +672,7 @@ CORRECTED GROUNDED ANSWER:`
           similarity: c.similarity,
         })),
         latency_ms: {
+          condensation: condensationLatency > 0 ? condensationLatency : undefined,
           retrieval: retrievalLatency,
           filtering: filterLatency,
           generation: Date.now() - genStart,
@@ -644,6 +692,8 @@ CORRECTED GROUNDED ANSWER:`
 
     return {
       question: cleanQuestion,
+      condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
+      was_condensed: wasCondensed,
       answer: rawAnswer,
       citations: validatedCitations,
       insufficient_evidence: false,
@@ -656,6 +706,7 @@ CORRECTED GROUNDED ANSWER:`
         similarity: c.similarity,
       })),
       latency_ms: {
+        condensation: condensationLatency > 0 ? condensationLatency : undefined,
         retrieval: retrievalLatency,
         filtering: filterLatency,
         generation: Date.now() - genStart,

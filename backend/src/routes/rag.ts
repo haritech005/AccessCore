@@ -48,7 +48,16 @@ router.post(
   '/chat',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { question, top_k, min_similarity, tenant_scope, model, audience } = req.body;
+      const {
+        question,
+        chat_history,
+        condense_query,
+        top_k,
+        min_similarity,
+        tenant_scope,
+        model,
+        audience,
+      } = req.body;
 
       if (!question || typeof question !== 'string') {
         throw new AppError('Field \'question\' is required and must be a string.', 400, 'INVALID_INPUT');
@@ -61,6 +70,8 @@ router.post(
 
       const result = await ragService.answerQuestion({
         question,
+        chat_history: Array.isArray(chat_history) ? chat_history : undefined,
+        condense_query: typeof condense_query === 'boolean' ? condense_query : undefined,
         top_k: typeof top_k === 'number' ? top_k : undefined,
         min_similarity: typeof min_similarity === 'number' ? min_similarity : undefined,
         tenant_scope: effectiveTenantScope,
@@ -85,7 +96,16 @@ router.post(
   '/rag/query',
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
-      const { question, top_k, min_similarity, tenant_scope, model, audience } = req.body;
+      const {
+        question,
+        chat_history,
+        condense_query,
+        top_k,
+        min_similarity,
+        tenant_scope,
+        model,
+        audience,
+      } = req.body;
 
       if (!question || typeof question !== 'string') {
         throw new AppError('Field \'question\' is required and must be a string.', 400, 'INVALID_INPUT');
@@ -98,6 +118,8 @@ router.post(
 
       const result = await ragService.answerQuestion({
         question,
+        chat_history: Array.isArray(chat_history) ? chat_history : undefined,
+        condense_query: typeof condense_query === 'boolean' ? condense_query : undefined,
         top_k: typeof top_k === 'number' ? top_k : undefined,
         min_similarity: typeof min_similarity === 'number' ? min_similarity : undefined,
         tenant_scope: effectiveTenantScope,

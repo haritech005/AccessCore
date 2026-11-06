@@ -42,8 +42,15 @@ export interface Citation {
   is_summary?: boolean;
 }
 
+export interface ChatMessageTurn {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
 export interface RAGAnswerResponse {
   question: string;
+  condensed_query?: string;
+  was_condensed?: boolean;
   answer: string;
   citations: Citation[];
   insufficient_evidence: boolean;
@@ -56,6 +63,7 @@ export interface RAGAnswerResponse {
     similarity: number;
   }[];
   latency_ms: {
+    condensation?: number;
     retrieval: number;
     filtering?: number;
     generation: number;
@@ -185,6 +193,7 @@ export async function fetchHealthStatus(): Promise<{
 export async function askQuestion(
   question: string,
   options?: {
+    chat_history?: ChatMessageTurn[];
     top_k?: number;
     min_similarity?: number;
     tenant_scope?: string[];
@@ -209,6 +218,7 @@ export async function askQuestion(
       credentials: 'include',
       body: JSON.stringify({
         question,
+        chat_history: options?.chat_history,
         top_k: options?.top_k ?? 5,
         min_similarity: options?.min_similarity ?? 0.35,
         tenant_scope: options?.tenant_scope,

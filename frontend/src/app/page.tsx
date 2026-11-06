@@ -104,8 +104,15 @@ export default function Home() {
     const effectiveAudience: AudienceMode =
       currentUser.user_type === 'customer_user' ? 'customer' : audienceMode;
 
+    const chatHistory = messages
+      .filter((m) => m.content && (m.role === 'user' || m.role === 'assistant'))
+      .map((m) => ({ role: m.role, content: m.content }));
+
     try {
-      const result = await askQuestion(question, { audience: effectiveAudience });
+      const result = await askQuestion(question, {
+        audience: effectiveAudience,
+        chat_history: chatHistory.length > 0 ? chatHistory : undefined,
+      });
 
       if (result.error || !result.data) {
         const errorMessage: ChatMessage = {

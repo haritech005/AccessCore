@@ -76,6 +76,24 @@ export interface HybridRetrievalResult {
 
 export type RetrievalStrategy = 'vector' | 'fts' | 'hybrid';
 
+export interface ChatMessageTurn {
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+}
+
+export interface QueryCondensationOptions {
+  question: string;
+  chat_history?: ChatMessageTurn[];
+  model?: string;
+}
+
+export interface QueryCondensationResult {
+  original_query: string;
+  condensed_query: string;
+  was_condensed: boolean;
+  latency_ms: number;
+}
+
 export interface Citation {
   document_id: string;
   title: string;
@@ -90,6 +108,8 @@ export interface Citation {
 
 export interface RAGAnswerResponse {
   question: string;
+  condensed_query?: string;
+  was_condensed?: boolean;
   answer: string;
   citations: Citation[];
   insufficient_evidence: boolean;
@@ -102,6 +122,7 @@ export interface RAGAnswerResponse {
     similarity: number;
   }[];
   latency_ms: {
+    condensation?: number;
     retrieval: number;
     filtering?: number;
     generation: number;
