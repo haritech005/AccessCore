@@ -109,6 +109,7 @@ export interface Citation {
 }
 
 export interface RAGAnswerResponse {
+  trace_id?: string;
   question: string;
   condensed_query?: string;
   was_condensed?: boolean;

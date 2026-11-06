@@ -10,6 +10,7 @@ import { disclosurePolicyService, PermittedEvidenceItem } from './disclosurePoli
 import { postGenerationValidator, POLICY_VIOLATION_MESSAGE } from './postGenerationValidator';
 import { queryCondensationService } from './queryCondensationService';
 import { sanitizeRetrievalOptions, DEFAULT_RETRIEVAL_CONFIG } from '../config/retrievalConfig';
+import { traceService, PipelineTrace, TraceOutcomeStatus } from './traceService';
 import { Citation, RAGAnswerResponse, RetrievedChunk, RetrievalStrategy, ChatMessageTurn } from '../types/rag';
 import { AuthenticatedUser } from '../types/identity';
 import { AudienceMode } from '../types/policy';
@@ -247,6 +248,7 @@ ${items}
    */
   async answerQuestion(options: RAGQueryOptions): Promise<RAGAnswerResponse> {
     const totalStart = Date.now();
+    const traceId = traceService.generateTraceId();
     const {
       question,
       chat_history,
@@ -381,7 +383,28 @@ ${items}
         }));
 
       if (isRestricted) {
+        this.logTrace({
+          traceId,
+          user,
+          effectiveAudience,
+          cleanQuestion,
+          wasCondensed,
+          effectiveSearchQuery,
+          condensationLatency,
+          retrievalLatency,
+          retrieval_strategy,
+          retConfig,
+          retrievedChunks,
+          hasBlockedTopMatch: true,
+          status: 'unauthorized_access',
+          insufficient_evidence: false,
+          unauthorized_access: true,
+          policy_violated: false,
+          totalDuration: Date.now() - totalStart,
+        });
+
         return {
+          trace_id: traceId,
           question: cleanQuestion,
           condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
           was_condensed: wasCondensed,
@@ -400,7 +423,28 @@ ${items}
         };
       }
 
+      this.logTrace({
+        traceId,
+        user,
+        effectiveAudience,
+        cleanQuestion,
+        wasCondensed,
+        effectiveSearchQuery,
+        condensationLatency,
+        retrievalLatency,
+        retrieval_strategy,
+        retConfig,
+        retrievedChunks,
+        hasBlockedTopMatch,
+        status: 'insufficient_evidence',
+        insufficient_evidence: true,
+        unauthorized_access: false,
+        policy_violated: false,
+        totalDuration: Date.now() - totalStart,
+      });
+
       return {
+        trace_id: traceId,
         question: cleanQuestion,
         condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
         was_condensed: wasCondensed,
@@ -450,7 +494,30 @@ ${items}
 
     // If disclosure policy filtered out ALL retrieved chunks (e.g., customer mode asking about internal runbook):
     if (permittedEvidence.length === 0) {
+      this.logTrace({
+        traceId,
+        user,
+        effectiveAudience,
+        cleanQuestion,
+        wasCondensed,
+        effectiveSearchQuery,
+        condensationLatency,
+        retrievalLatency,
+        retrieval_strategy,
+        retConfig,
+        retrievedChunks,
+        hasBlockedTopMatch,
+        filterLatency,
+        permittedEvidence: [],
+        status: 'insufficient_evidence',
+        insufficient_evidence: true,
+        unauthorized_access: false,
+        policy_violated: false,
+        totalDuration: Date.now() - totalStart,
+      });
+
       return {
+        trace_id: traceId,
         question: cleanQuestion,
         condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
         was_condensed: wasCondensed,
@@ -666,7 +733,35 @@ CORRECTED GROUNDED ANSWER:`
 
     // If still invalid after bounded regeneration, enforce safe policy failure response
     if (!validationResult.valid) {
+      this.logTrace({
+        traceId,
+        user,
+        effectiveAudience,
+        cleanQuestion,
+        wasCondensed,
+        effectiveSearchQuery,
+        condensationLatency,
+        retrievalLatency,
+        retrieval_strategy,
+        retConfig,
+        retrievedChunks,
+        hasBlockedTopMatch,
+        filterLatency,
+        permittedEvidence,
+        generationLatency: Date.now() - genStart,
+        model: chatModelName,
+        validationLatency: 0,
+        answerValid: false,
+        policyViolated: true,
+        status: 'policy_violated',
+        insufficient_evidence: true,
+        unauthorized_access: false,
+        policy_violated: true,
+        totalDuration: Date.now() - totalStart,
+      });
+
       return {
+        trace_id: traceId,
         question: cleanQuestion,
         condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
         was_condensed: wasCondensed,
@@ -700,7 +795,36 @@ CORRECTED GROUNDED ANSWER:`
     );
     const validatedCitations = citationValResult.validCitations;
 
+    this.logTrace({
+      traceId,
+      user,
+      effectiveAudience,
+      cleanQuestion,
+      wasCondensed,
+      effectiveSearchQuery,
+      condensationLatency,
+      retrievalLatency,
+      retrieval_strategy,
+      retConfig,
+      retrievedChunks,
+      hasBlockedTopMatch,
+      filterLatency,
+      permittedEvidence,
+      generationLatency: Date.now() - genStart,
+      model: chatModelName,
+      validationLatency: 0,
+      answerValid: true,
+      policyViolated: false,
+      citations: validatedCitations,
+      status: 'success',
+      insufficient_evidence: false,
+      unauthorized_access: false,
+      policy_violated: false,
+      totalDuration: Date.now() - totalStart,
+    });
+
     return {
+      trace_id: traceId,
       question: cleanQuestion,
       condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
       was_condensed: wasCondensed,
@@ -723,6 +847,120 @@ CORRECTED GROUNDED ANSWER:`
         total: Date.now() - totalStart,
       },
     };
+  }
+
+  private logTrace(params: {
+    traceId: string;
+    user?: AuthenticatedUser;
+    effectiveAudience: AudienceMode;
+    cleanQuestion: string;
+    wasCondensed: boolean;
+    effectiveSearchQuery: string;
+    condensationLatency: number;
+    retrievalLatency: number;
+    retrieval_strategy: string;
+    retConfig: any;
+    retrievedChunks: RetrievedChunk[];
+    hasBlockedTopMatch?: boolean;
+    filterLatency?: number;
+    permittedEvidence?: PermittedEvidenceItem[];
+    generationLatency?: number;
+    model?: string;
+    validationLatency?: number;
+    answerValid?: boolean;
+    policyViolated?: boolean;
+    citations?: Citation[];
+    status: TraceOutcomeStatus;
+    insufficient_evidence: boolean;
+    unauthorized_access: boolean;
+    policy_violated: boolean;
+    totalDuration: number;
+  }) {
+    try {
+      const candidateDocIds = Array.from(new Set(params.retrievedChunks.map((c) => c.document_id)));
+      const permittedDocIds = params.permittedEvidence
+        ? Array.from(new Set(params.permittedEvidence.map((e) => e.document_id)))
+        : [];
+      const citedDocIds = params.citations
+        ? Array.from(new Set(params.citations.map((c) => c.document_id)))
+        : [];
+      const summaryCount = params.citations
+        ? params.citations.filter((c) => c.is_summary).length
+        : 0;
+
+      const trace: PipelineTrace = {
+        trace_id: params.traceId,
+        timestamp: new Date().toISOString(),
+        user: {
+          id: params.user?.id || 'anonymous',
+          role: params.user?.role || 'anonymous',
+          tenant_scope: params.user?.tenant_scope || [],
+        },
+        audience: params.effectiveAudience,
+        request: {
+          question_length: params.cleanQuestion.length,
+          was_condensed: params.wasCondensed,
+        },
+        stages: {
+          condensation: params.wasCondensed
+            ? {
+                duration_ms: params.condensationLatency,
+                was_condensed: true,
+                original_query_length: params.cleanQuestion.length,
+                condensed_query_length: params.effectiveSearchQuery.length,
+              }
+            : undefined,
+          retrieval: {
+            duration_ms: params.retrievalLatency,
+            strategy: params.retrieval_strategy as any,
+            vector_pool_count: params.retConfig.vector_candidates,
+            fts_pool_count: params.retConfig.fts_candidates,
+            fused_count: params.retrievedChunks.length,
+            top_k: params.retConfig.top_k,
+            candidate_document_ids: candidateDocIds,
+            top_matched_document_id: params.retrievedChunks[0]?.document_id,
+            has_blocked_top_match: params.hasBlockedTopMatch,
+          },
+          disclosure_filtering: params.filterLatency !== undefined
+            ? {
+                duration_ms: params.filterLatency,
+                input_chunks_count: params.retrievedChunks.length,
+                permitted_chunks_count: params.permittedEvidence?.length || 0,
+                filtered_chunks_count:
+                  params.retrievedChunks.length - (params.permittedEvidence?.length || 0),
+                permitted_document_ids: permittedDocIds,
+              }
+            : undefined,
+          generation: {
+            duration_ms: params.generationLatency || 0,
+            model: params.model || this.defaultModel,
+            evidence_items_supplied: params.permittedEvidence?.length || 0,
+            retried_bounded_generation: false,
+          },
+          validation: {
+            duration_ms: params.validationLatency || 0,
+            answer_valid: params.answerValid !== false,
+            policy_violated: params.policyViolated === true,
+          },
+          citations: {
+            count: params.citations?.length || 0,
+            cited_document_ids: citedDocIds,
+            summary_citations_count: summaryCount,
+          },
+        },
+        outcome: {
+          status: params.status,
+          insufficient_evidence: params.insufficient_evidence,
+          unauthorized_access: params.unauthorized_access,
+          policy_violated: params.policy_violated,
+        },
+        total_latency_ms: params.totalDuration,
+      };
+
+      traceService.recordTrace(trace);
+    } catch (traceErr) {
+      console.warn('[TraceService] Failed to record trace non-critically:', traceErr);
+    }
   }
 }
 

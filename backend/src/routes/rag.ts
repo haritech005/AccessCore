@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ragService } from '../services/ragService';
+import { traceService } from '../services/traceService';
 import { AppError } from '../middleware/errorHandler';
 import { requireAuth } from '../middleware/auth';
 
@@ -158,5 +159,62 @@ router.post(
     }
   }
 );
+
+router.use('/traces', requireAuth);
+
+/**
+ * GET /api/rag/traces
+ * List recent traces with pagination and access controls.
+ */
+router.get('/traces', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user!;
+    const limit = typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 50;
+    const allTraces = traceService.listTraces({ limit });
+
+    // Sanitize each trace according to requester permissions
+    const sanitizedTraces = allTraces
+      .map((t) => traceService.sanitizeForViewer(t, user))
+      .filter((t) => t !== null);
+
+    res.status(200).json({
+      success: true,
+      data: {
+        traces: sanitizedTraces,
+        total: sanitizedTraces.length,
+      },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/rag/traces/:traceId
+ * Retrieve single trace by ID.
+ */
+router.get('/traces/:traceId', async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const user = req.user!;
+    const traceId = Array.isArray(req.params.traceId) ? req.params.traceId[0] : req.params.traceId;
+    const trace = traceService.getTrace(traceId);
+
+    if (!trace) {
+      throw new AppError(`Trace '${traceId}' not found.`, 404, 'TRACE_NOT_FOUND');
+    }
+
+    const sanitized = traceService.sanitizeForViewer(trace, user);
+    if (!sanitized) {
+      throw new AppError('You are not authorized to view this trace.', 403, 'FORBIDDEN');
+    }
+
+    res.status(200).json({
+      success: true,
+      data: sanitized,
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 export default router;
