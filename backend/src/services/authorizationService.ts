@@ -42,6 +42,7 @@ export interface ChunkResource {
   tenant_id: string;
   allowed_groups: string[];
   sensitivity: SensitivityLevel;
+  disclosure_policy?: string;
   is_active?: boolean;
 }
 

@@ -31,6 +31,7 @@
     "filtering:test": "tsx src/services/testPreGenerationFiltering.ts",
     "validation:test": "tsx src/services/testAnswerAndCitationValidation.ts",
     "test:disclosure:security": "tsx src/services/testDisclosureSecuritySuite.ts",
+    "test:phase3:manual": "tsx src/services/testPhase3ManualQuestions.ts",
     "fts:test": "tsx src/services/testFullTextSearch.ts",
     "hybrid:test": "tsx src/services/testHybridRetrieval.ts",
     "condensation:test": "tsx src/services/testQueryCondensation.ts",

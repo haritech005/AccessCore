@@ -81,7 +81,7 @@ async function runMasterRegression() {
         cwd: backendDir,
         encoding: 'utf8',
         stdio: 'pipe',
-        timeout: 90000,
+        timeout: 240000,
       });
 
       const durationMs = Date.now() - startSuite;

@@ -141,6 +141,7 @@ export class HybridRetrievalService {
           tenant_id: chunk.metadata.tenant_id,
           allowed_groups: chunk.metadata.allowed_groups,
           sensitivity: chunk.metadata.sensitivity,
+          disclosure_policy: chunk.metadata.disclosure_policy,
           is_active: chunk.is_active,
         }).allowed;
       });

@@ -101,8 +101,9 @@ export class RetrievalService {
           tenant_id: string;
           allowed_groups: string[];
           sensitivity: string;
+          disclosure_policy: string;
         }>(
-          `SELECT DISTINCT d.document_id, c.metadata->>'tenant_id' as tenant_id, c.metadata->'allowed_groups' as allowed_groups, c.metadata->>'sensitivity' as sensitivity
+          `SELECT DISTINCT d.document_id, c.metadata->>'tenant_id' as tenant_id, c.metadata->'allowed_groups' as allowed_groups, c.metadata->>'sensitivity' as sensitivity, c.metadata->>'disclosure_policy' as disclosure_policy
            FROM document_chunks c
            JOIN documents d ON c.document_id = d.id
            JOIN document_versions v ON c.version_id = v.id
@@ -120,6 +121,7 @@ export class RetrievalService {
               tenant_id: citedDoc.tenant_id,
               allowed_groups: Array.isArray(citedDoc.allowed_groups) ? citedDoc.allowed_groups : [],
               sensitivity: (citedDoc.sensitivity as SensitivityLevel) || 'internal',
+              disclosure_policy: citedDoc.disclosure_policy as any,
             }).allowed;
           } else {
             const hasTenant =
@@ -156,6 +158,7 @@ export class RetrievalService {
           c.metadata->>'tenant_id' as tenant_id,
           c.metadata->'allowed_groups' as allowed_groups,
           c.metadata->>'sensitivity' as sensitivity,
+          c.metadata->>'disclosure_policy' as disclosure_policy,
           (1 - (c.embedding <=> $1::vector)) as similarity
         FROM document_chunks c
         JOIN documents d ON c.document_id = d.id
@@ -171,6 +174,7 @@ export class RetrievalService {
         tenant_id: string;
         allowed_groups: string[];
         sensitivity: string;
+        disclosure_policy: string;
         similarity: number;
       }>(topCheckSql, topCheckParams);
 
@@ -185,6 +189,7 @@ export class RetrievalService {
             tenant_id: top.tenant_id,
             allowed_groups: Array.isArray(top.allowed_groups) ? top.allowed_groups : [],
             sensitivity: (top.sensitivity as SensitivityLevel) || 'internal',
+            disclosure_policy: top.disclosure_policy as any,
           }).allowed;
         } else {
           const hasTenant =
@@ -346,6 +351,7 @@ export class RetrievalService {
           tenant_id: chunk.metadata.tenant_id,
           allowed_groups: chunk.metadata.allowed_groups,
           sensitivity: chunk.metadata.sensitivity,
+          disclosure_policy: chunk.metadata.disclosure_policy,
           is_active: chunk.is_active,
         }).allowed;
       });

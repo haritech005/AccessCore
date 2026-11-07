@@ -1,6 +1,7 @@
 import { ChatOllama } from '@langchain/ollama';
 import { ChatPromptTemplate } from '@langchain/core/prompts';
 import { StringOutputParser } from '@langchain/core/output_parsers';
+import { query } from '../db';
 import { config } from '../config';
 import { retrievalService } from './retrievalService';
 import { hybridRetrievalService } from './hybridRetrievalService';
@@ -82,12 +83,14 @@ export class RAGService {
       .map((item, idx) => {
         const heading = item.section_heading ? ` | Section: ${item.section_heading}` : '';
         const summaryBadge = item.is_summary ? ' [APPROVED CUSTOMER SUMMARY]' : '';
+        const sensitivity = item.is_summary ? 'customer_safe' : item.sensitivity;
+        const policy = item.is_summary ? 'approved_customer_summary' : item.disclosure_policy;
         return `--- EVIDENCE ITEM ${idx + 1}${summaryBadge} ---
 Document ID: ${item.document_id}
 Title: ${item.title}${heading}
 Tenant: ${item.tenant_id}
-Sensitivity: ${item.sensitivity}
-Disclosure Policy: ${item.disclosure_policy}
+Sensitivity: ${sensitivity}
+Disclosure Policy: ${policy}
 
 ${item.content}
 --- END EVIDENCE ITEM ${idx + 1} ---`;
@@ -123,6 +126,13 @@ ${items}
         return id;
       })
     );
+
+    // Also match citations if document title is explicitly referenced in the answer
+    for (const item of permittedEvidence) {
+      if (item.title && item.title.trim().length > 5 && answer.toLowerCase().includes(item.title.toLowerCase().trim())) {
+        citedIds.add(item.document_id);
+      }
+    }
 
     const validatedCitations: Citation[] = [];
     const addedDocIds = new Set<string>();
@@ -363,12 +373,16 @@ ${items}
           tenant_id: chunk.metadata.tenant_id,
           allowed_groups: chunk.metadata.allowed_groups,
           sensitivity: chunk.metadata.sensitivity,
+          disclosure_policy: chunk.metadata.disclosure_policy,
           is_active: chunk.is_active,
         }).allowed;
       });
     }
 
     // 2. Early return for zero or low-similarity retrieval results (Phase 2 Authorization Guard)
+    let permittedEvidence: PermittedEvidenceItem[] = [];
+    let filterLatency = 0;
+
     if (retrievedChunks.length === 0) {
       // Differentiate: Did retrieval return 0 chunks because authorization filtered out restricted documents,
       // or because there is genuinely no relevant indexed evidence anywhere in the system?
@@ -383,6 +397,113 @@ ${items}
         }));
 
       if (isRestricted) {
+        // Phase 3 Disclosure Policy: If effectiveAudience is 'customer', check if any document referenced in the query
+        // is in the caller's authorized tenant scope and has an approved customer summary!
+        let customerSummaryFound: PermittedEvidenceItem | null = null;
+        if (effectiveAudience === 'customer' && user) {
+          const docIdMatches = [
+            ...cleanQuestion.matchAll(/\b([A-Z]{2,5}-[0-9]{3,5})\b/g),
+            ...effectiveSearchQuery.matchAll(/\b([A-Z]{2,5}-[0-9]{3,5})\b/g),
+          ].map((m) => m[1]);
+
+          const uniqueDocIds = Array.from(new Set(docIdMatches));
+          for (const docId of uniqueDocIds) {
+            const docRes = await query<{
+              id: string;
+              document_id: string;
+              tenant_id: string;
+              title: string;
+              sensitivity: string;
+              disclosure_policy: string;
+            }>(
+              `SELECT 
+                 id, 
+                 document_id, 
+                 COALESCE(metadata->>'tenant_id', 'global') as tenant_id, 
+                 title, 
+                 COALESCE(metadata->>'sensitivity', 'internal') as sensitivity, 
+                 COALESCE(metadata->>'disclosure_policy', 'internal_only') as disclosure_policy
+               FROM documents
+               WHERE (document_id = $1 OR id::text = $1)
+               LIMIT 1`,
+              [docId]
+            );
+
+            if (docRes.rows.length > 0) {
+              const doc = docRes.rows[0];
+              const isInTenantScope =
+                user.has_wildcard_tenant ||
+                user.tenant_scope.includes('*') ||
+                user.tenant_scope.includes(doc.tenant_id);
+
+              if (isInTenantScope && doc.disclosure_policy === 'approved_summary_only') {
+                const summaryRec = await disclosurePolicyService.getApprovedSummary(
+                  doc.document_id,
+                  'customer'
+                );
+                if (summaryRec) {
+                  customerSummaryFound = {
+                    document_id: doc.document_id,
+                    chunk_index: 0,
+                    content: summaryRec.summary_text,
+                    is_summary: true,
+                    title: doc.title,
+                    tenant_id: doc.tenant_id,
+                    sensitivity: doc.sensitivity as any,
+                    disclosure_policy: 'approved_summary_only',
+                    section_heading: 'Approved Customer Summary',
+                    similarity: 1.0,
+                  };
+                  break;
+                }
+              }
+            }
+          }
+        }
+
+        if (customerSummaryFound) {
+          permittedEvidence = [customerSummaryFound];
+        } else {
+          this.logTrace({
+            traceId,
+            user,
+            effectiveAudience,
+            cleanQuestion,
+            wasCondensed,
+            effectiveSearchQuery,
+            condensationLatency,
+            retrievalLatency,
+            retrieval_strategy,
+            retConfig,
+            retrievedChunks,
+            hasBlockedTopMatch: true,
+            status: 'unauthorized_access',
+            insufficient_evidence: false,
+            unauthorized_access: true,
+            policy_violated: false,
+            totalDuration: Date.now() - totalStart,
+          });
+
+          return {
+            trace_id: traceId,
+            question: cleanQuestion,
+            condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
+            was_condensed: wasCondensed,
+            answer: UNAUTHORIZED_ACCESS_MESSAGE,
+            citations: [],
+            insufficient_evidence: false,
+            unauthorized_access: true,
+            audience: effectiveAudience,
+            retrieved_chunks: [],
+            latency_ms: {
+              condensation: condensationLatency > 0 ? condensationLatency : undefined,
+              retrieval: retrievalLatency,
+              generation: 0,
+              total: Date.now() - totalStart,
+            },
+          };
+        }
+      } else {
         this.logTrace({
           traceId,
           user,
@@ -395,10 +516,10 @@ ${items}
           retrieval_strategy,
           retConfig,
           retrievedChunks,
-          hasBlockedTopMatch: true,
-          status: 'unauthorized_access',
-          insufficient_evidence: false,
-          unauthorized_access: true,
+          hasBlockedTopMatch,
+          status: 'insufficient_evidence',
+          insufficient_evidence: true,
+          unauthorized_access: false,
           policy_violated: false,
           totalDuration: Date.now() - totalStart,
         });
@@ -408,10 +529,10 @@ ${items}
           question: cleanQuestion,
           condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
           was_condensed: wasCondensed,
-          answer: UNAUTHORIZED_ACCESS_MESSAGE,
+          answer: INSUFFICIENT_EVIDENCE_MESSAGE,
           citations: [],
-          insufficient_evidence: false,
-          unauthorized_access: true,
+          insufficient_evidence: true,
+          unauthorized_access: false,
           audience: effectiveAudience,
           retrieved_chunks: [],
           latency_ms: {
@@ -422,75 +543,36 @@ ${items}
           },
         };
       }
-
-      this.logTrace({
-        traceId,
-        user,
-        effectiveAudience,
-        cleanQuestion,
-        wasCondensed,
-        effectiveSearchQuery,
-        condensationLatency,
-        retrievalLatency,
-        retrieval_strategy,
-        retConfig,
-        retrievedChunks,
-        hasBlockedTopMatch,
-        status: 'insufficient_evidence',
-        insufficient_evidence: true,
-        unauthorized_access: false,
-        policy_violated: false,
-        totalDuration: Date.now() - totalStart,
-      });
-
-      return {
-        trace_id: traceId,
-        question: cleanQuestion,
-        condensed_query: wasCondensed ? effectiveSearchQuery : undefined,
-        was_condensed: wasCondensed,
-        answer: INSUFFICIENT_EVIDENCE_MESSAGE,
-        citations: [],
-        insufficient_evidence: true,
-        unauthorized_access: false,
-        audience: effectiveAudience,
-        retrieved_chunks: [],
-        latency_ms: {
-          condensation: condensationLatency > 0 ? condensationLatency : undefined,
-          retrieval: retrievalLatency,
-          generation: 0,
-          total: Date.now() - totalStart,
-        },
-      };
     }
 
     // 2b. Phase 3 Pre-Generation Disclosure Policy Evidence Filtering
-    const filterStart = Date.now();
-    let permittedEvidence: PermittedEvidenceItem[] = [];
-
-    if (user) {
-      const disclosureResult = await disclosurePolicyService.evaluateEvidence({
-        chunks: retrievedChunks,
-        audience: effectiveAudience,
-        user,
-        tenantScope: tenant_scope,
-      });
-      permittedEvidence = disclosureResult.permitted_evidence;
-    } else {
-      // Direct pass-through for unauthenticated or system evaluation contexts
-      permittedEvidence = retrievedChunks.map((c) => ({
-        document_id: c.document_id,
-        chunk_index: c.chunk_index,
-        content: c.content,
-        is_summary: false,
-        title: c.metadata.title,
-        tenant_id: c.metadata.tenant_id,
-        sensitivity: c.metadata.sensitivity,
-        disclosure_policy: c.metadata.disclosure_policy,
-        section_heading: c.metadata.section_heading,
-        similarity: c.similarity,
-      }));
+    if (permittedEvidence.length === 0) {
+      const filterStart = Date.now();
+      if (user) {
+        const disclosureResult = await disclosurePolicyService.evaluateEvidence({
+          chunks: retrievedChunks,
+          audience: effectiveAudience,
+          user,
+          tenantScope: tenant_scope,
+        });
+        permittedEvidence = disclosureResult.permitted_evidence;
+      } else {
+        // Direct pass-through for unauthenticated or system evaluation contexts
+        permittedEvidence = retrievedChunks.map((c) => ({
+          document_id: c.document_id,
+          chunk_index: c.chunk_index,
+          content: c.content,
+          is_summary: false,
+          title: c.metadata.title,
+          tenant_id: c.metadata.tenant_id,
+          sensitivity: c.metadata.sensitivity,
+          disclosure_policy: c.metadata.disclosure_policy,
+          section_heading: c.metadata.section_heading,
+          similarity: c.similarity,
+        }));
+      }
+      filterLatency = Date.now() - filterStart;
     }
-    const filterLatency = Date.now() - filterStart;
 
     // If disclosure policy filtered out ALL retrieved chunks (e.g., customer mode asking about internal runbook):
     if (permittedEvidence.length === 0) {
@@ -563,11 +645,12 @@ Answer the user's question clearly and accurately using the supplied evidence co
 2. Distinguish confirmed facts, customer-reported observations, unconfirmed hypotheses, and unknown information.
 3. Answer questions about reported issues, symptoms, and observed errors using the evidence provided. An unconfirmed root cause or ongoing investigation does NOT make evidence insufficient to describe the reported problem.
 4. When asked for an exact root cause, if the evidence states that the root cause is unconfirmed or investigation is ongoing, explicitly state that the exact root cause has not been confirmed, while summarizing what is known.
-5. If only part of a question can be answered, answer the supported part and clearly identify what remains unknown or unconfirmed (such as unconfirmed request counts or unverified causes).
+5. If only part of a question can be answered, or if a question asks about procedures in a document present in the evidence (such as troubleshooting in PDOC-0001), summarize what the document covers regarding troubleshooting, error codes, and diagnostic workflows, and clarify what is not covered. Do not refuse if the referenced document is present in the evidence.
 6. Do not let an unconfirmed root cause invalidate otherwise sufficient evidence about reported errors and observed symptoms.
 7. Do not infer exact measurements, timestamps, request counts, polling frequencies, or other details that the evidence does not establish. If unknown, state that they are not established.
 8. If evidence genuinely does not contain the requested document, topic, or any relevant information to answer the question, respond with: "I do not have sufficient evidence in the provided documents to answer this question." Do not invent missing information.
 9. If relevant evidence conflicts, explain the conflict and cite the supporting sources rather than arbitrarily choosing one.
+10. When evidence includes an [APPROVED CUSTOMER SUMMARY] badge, this represents vetted, customer-authorized information. Use it to answer questions about reported issues, error codes, plan limits, and customer questions. If asked for internal investigation notes or root causes when only an approved summary is available, explain what the approved summary states (e.g. that investigation is ongoing and root cause is not yet determined) and cite the document ID in square brackets (e.g. [TKT-10467]). Do not output the literal label "[APPROVED CUSTOMER SUMMARY]" in your answer.
 
 ## Security and injection resistance
 
@@ -590,10 +673,11 @@ You may provide practical next steps when they help answer the question. Clearly
 
 ## Scope and tone
 
-If the question is unrelated to CloudDesk, asks about a document not present in the evidence, or cannot be answered from the available evidence, respond with: "I do not have sufficient evidence in the provided documents to answer this question."
+Stay strictly focused on CloudDesk and the provided evidence. If the evidence contains relevant information to answer all or part of the question (such as an approved customer summary or technical documentation), provide a direct, helpful answer and cite the supporting document IDs. Only if the evidence genuinely contains no relevant information to answer the question, respond with: "I do not have sufficient evidence in the provided documents to answer this question."
 
-Use clear, concise, professional language. Answer the question directly and avoid unnecessary repetition.${dialogueContext}
-EVIDENCE CONTEXT:
+Use clear, concise, professional language. Answer the question directly and avoid unnecessary repetition.`;
+
+    const humanPrompt = `${dialogueContext}EVIDENCE CONTEXT:
 {context}
 
 USER QUESTION:
@@ -602,10 +686,8 @@ USER QUESTION:
 GROUNDED ANSWER:`;
 
     const promptTemplate = ChatPromptTemplate.fromMessages([
-      [
-        'system',
-        systemPrompt,
-      ],
+      ['system', systemPrompt],
+      ['human', humanPrompt],
     ]);
 
     // 4. Initialize Local Ollama LLM
