@@ -59,6 +59,12 @@ const REGRESSION_SUITES = [
     script: 'npm run traces:test',
     phase: 'Phase 4: Retrieval Intelligence',
   },
+  // Subphase 5.2: Chat Conversations & History Isolation
+  {
+    name: 'Chat Conversations & Isolation Suite (7 Tests)',
+    script: 'npm run test:conversations',
+    phase: 'Phase 5: Productization & Release',
+  },
 ];
 
 async function runMasterRegression() {

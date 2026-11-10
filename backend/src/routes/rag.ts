@@ -1,6 +1,7 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { ragService } from '../services/ragService';
 import { traceService } from '../services/traceService';
+import { conversationService } from '../services/conversationService';
 import { AppError } from '../middleware/errorHandler';
 import { requireAuth } from '../middleware/auth';
 
@@ -92,9 +93,45 @@ router.post(
         audience: typeof audience === 'string' ? audience : undefined,
       });
 
+      const conversationId =
+        typeof req.body.conversation_id === 'string' ? req.body.conversation_id : undefined;
+
+      // If conversation_id is provided, automatically persist user prompt and assistant response
+      if (conversationId && req.user) {
+        try {
+          await conversationService.addMessage({
+            conversationId,
+            userId: req.user.id,
+            role: 'user',
+            content: question,
+            autoTitle: true,
+          });
+
+          await conversationService.addMessage({
+            conversationId,
+            userId: req.user.id,
+            role: 'assistant',
+            content: result.answer,
+            citations: result.citations,
+            metadata: {
+              audience: result.audience,
+              insufficient_evidence: result.insufficient_evidence,
+              unauthorized_access: result.unauthorized_access,
+              policy_violated: result.policy_violated,
+              latency_ms: result.latency_ms,
+            },
+          });
+        } catch (saveErr) {
+          console.warn('[RAG Router] Failed to persist message to conversation history:', saveErr);
+        }
+      }
+
       res.status(200).json({
         success: true,
-        data: result,
+        data: {
+          ...result,
+          conversation_id: conversationId,
+        },
       });
     } catch (err) {
       next(err);
@@ -150,9 +187,45 @@ router.post(
         audience: typeof audience === 'string' ? audience : undefined,
       });
 
+      const conversationId =
+        typeof req.body.conversation_id === 'string' ? req.body.conversation_id : undefined;
+
+      // If conversation_id is provided, automatically persist user prompt and assistant response
+      if (conversationId && req.user) {
+        try {
+          await conversationService.addMessage({
+            conversationId,
+            userId: req.user.id,
+            role: 'user',
+            content: question,
+            autoTitle: true,
+          });
+
+          await conversationService.addMessage({
+            conversationId,
+            userId: req.user.id,
+            role: 'assistant',
+            content: result.answer,
+            citations: result.citations,
+            metadata: {
+              audience: result.audience,
+              insufficient_evidence: result.insufficient_evidence,
+              unauthorized_access: result.unauthorized_access,
+              policy_violated: result.policy_violated,
+              latency_ms: result.latency_ms,
+            },
+          });
+        } catch (saveErr) {
+          console.warn('[RAG Router] Failed to persist message to conversation history:', saveErr);
+        }
+      }
+
       res.status(200).json({
         success: true,
-        data: result,
+        data: {
+          ...result,
+          conversation_id: conversationId,
+        },
       });
     } catch (err) {
       next(err);

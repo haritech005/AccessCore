@@ -38,6 +38,7 @@
     "config:tune:test": "tsx src/services/testRetrievalConfig.ts",
     "metrics:test": "tsx src/evaluation/testMetricsEngine.ts",
     "traces:test": "tsx src/services/testTracing.ts",
+    "test:conversations": "tsx src/services/testConversationService.ts",
     "test:regression": "tsx src/services/testMasterRegression.ts",
     "eval:baseline": "tsx src/evaluation/runBaselineEval.ts",
     "eval:hybrid": "tsx src/evaluation/runHybridEval.ts",

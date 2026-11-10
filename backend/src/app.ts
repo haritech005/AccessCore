@@ -6,6 +6,7 @@ import authRouter from './routes/auth';
 import documentsRouter from './routes/documents';
 import retrievalRouter from './routes/retrieval';
 import ragRouter from './routes/rag';
+import conversationsRouter from './routes/conversations';
 import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 export function createApp(): Express {
@@ -28,6 +29,7 @@ export function createApp(): Express {
   app.use('/api', documentsRouter);
   app.use('/api', retrievalRouter);
   app.use('/api', ragRouter);
+  app.use('/api', conversationsRouter);
 
   // 404 and Error handling
   app.use(notFoundHandler);

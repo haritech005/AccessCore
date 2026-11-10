@@ -7,9 +7,11 @@ interface HeaderProps {
   isBackendConnected: boolean | null;
   documentCount: number;
   currentUser: AuthUserProfile | null;
-  onOpenKnowledgeDrawer: (initialTab?: 'upload' | 'library') => void;
+  onOpenKnowledgeDrawer: () => void;
   onOpenLoginModal: () => void;
   onLogout: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarOpen?: boolean;
 }
 
 export function Header({
@@ -19,6 +21,8 @@ export function Header({
   onOpenKnowledgeDrawer,
   onOpenLoginModal,
   onLogout,
+  onToggleSidebar,
+  isSidebarOpen,
 }: HeaderProps) {
   return (
     <header
@@ -28,85 +32,87 @@ export function Header({
         backdropFilter: 'blur(12px)',
         position: 'sticky',
         top: 0,
-        zIndex: 50,
+        zIndex: 30,
+        height: '60px',
       }}
     >
       <div
         style={{
-          maxWidth: '1280px',
-          margin: '0 auto',
-          padding: '0 24px',
-          height: '68px',
+          width: '100%',
+          padding: '0 20px',
+          height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}
       >
-        {/* Brand identity */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '14px' }}>
-          <div
-            style={{
-              width: '38px',
-              height: '38px',
-              borderRadius: '10px',
-              background: 'var(--accent-gradient)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontWeight: 800,
-              fontSize: '1.25rem',
-              color: '#ffffff',
-              boxShadow: 'var(--shadow-glow)',
-              flexShrink: 0,
-            }}
-          >
-            A
-          </div>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <h1
-                style={{
-                  fontSize: '1.15rem',
-                  fontWeight: 700,
-                  letterSpacing: '-0.02em',
-                  color: 'var(--text-primary)',
-                }}
-              >
-                AccessCore
-              </h1>
-              <span
-                style={{
-                  fontSize: '0.65rem',
-                  fontWeight: 700,
-                  textTransform: 'uppercase',
-                  padding: '2px 6px',
-                  borderRadius: '4px',
-                  background: 'rgba(99, 102, 241, 0.15)',
-                  color: '#a5b4fc',
-                  border: '1px solid rgba(99, 102, 241, 0.3)',
-                  letterSpacing: '0.05em',
-                }}
-              >
-                Enterprise RAG
-              </span>
-            </div>
-            <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-              Permission-Aware Knowledge Assistant
-            </p>
+        {/* Left Side: Sidebar Toggle & Brand */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              title={isSidebarOpen ? 'Hide sidebar' : 'Open sidebar'}
+              style={{
+                padding: '7px',
+                borderRadius: '7px',
+                backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                border: '1px solid rgba(255, 255, 255, 0.08)',
+                color: '#94a3b8',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
+                e.currentTarget.style.color = '#ffffff';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
+                e.currentTarget.style.color = '#94a3b8';
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <rect width="18" height="18" x="3" y="3" rx="2" />
+                <path d="M9 3v18" />
+              </svg>
+            </button>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
+              AccessCore
+            </span>
+            <span
+              style={{
+                fontSize: '0.65rem',
+                fontWeight: 700,
+                textTransform: 'uppercase',
+                padding: '2px 6px',
+                borderRadius: '4px',
+                background: 'rgba(99, 102, 241, 0.15)',
+                color: '#a5b4fc',
+                border: '1px solid rgba(99, 102, 241, 0.3)',
+                letterSpacing: '0.04em',
+              }}
+            >
+              Knowledge AI
+            </span>
           </div>
         </div>
 
         {/* Right action controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
           {/* Connection status indicator */}
           <div
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
-              fontSize: '0.8rem',
+              gap: '6px',
+              fontSize: '0.75rem',
               color: 'var(--text-secondary)',
-              padding: '6px 12px',
+              padding: '4px 10px',
               background: 'rgba(255, 255, 255, 0.03)',
               borderRadius: 'var(--radius-full)',
               border: '1px solid var(--border-subtle)',
@@ -118,98 +124,65 @@ export function Header({
                   ? 'status-dot-active'
                   : isBackendConnected === false
                   ? 'status-dot-error'
-                  : 'status-dot-warning'
+                  : 'status-dot-pending'
               }`}
             />
-            <span>
-              {isBackendConnected === true
-                ? 'System Ready'
-                : isBackendConnected === false
-                ? 'Offline'
-                : 'Connecting...'}
+            <span style={{ display: 'inline' }}>
+              {isBackendConnected === true ? 'Online' : isBackendConnected === false ? 'Offline' : 'Connecting'}
             </span>
           </div>
 
-          {/* Upload Button */}
+          {/* Document Library Button */}
           <button
-            onClick={() => onOpenKnowledgeDrawer('upload')}
-            className="btn-primary"
+            onClick={onOpenKnowledgeDrawer}
             style={{
-              padding: '7px 14px',
-              fontSize: '0.825rem',
+              padding: '6px 12px',
+              fontSize: '0.8rem',
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
+              backgroundColor: 'rgba(255, 255, 255, 0.04)',
+              border: '1px solid rgba(255, 255, 255, 0.09)',
+              borderRadius: '7px',
+              color: '#cbd5e1',
+              cursor: 'pointer',
+              fontWeight: 500,
+              transition: 'all 0.15s ease',
             }}
-            title="Upload new documentation or support ticket"
+            onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)')}
+            onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)')}
+            title="Inspect permitted knowledge documents"
           >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-              <polyline points="17 8 12 3 7 8" />
-              <line x1="12" y1="3" x2="12" y2="15" />
-            </svg>
-            <span>Upload Document</span>
-          </button>
-
-          {/* Knowledge Library Button */}
-          <button
-            onClick={() => onOpenKnowledgeDrawer('library')}
-            className="btn-secondary"
-            style={{
-              padding: '7px 12px',
-              fontSize: '0.825rem',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '7px',
-            }}
-            title="View indexed knowledge documents"
-          >
-            <svg
-              width="15"
-              height="15"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
               <path d="M6 6h10" />
               <path d="M6 10h10" />
             </svg>
-            <span>Knowledge Base</span>
-            <span
-              style={{
-                fontSize: '0.7rem',
-                fontWeight: 700,
-                background: 'rgba(255, 255, 255, 0.1)',
-                padding: '1px 6px',
-                borderRadius: 'var(--radius-full)',
-                color: 'var(--text-primary)',
-              }}
-            >
-              {documentCount}
-            </span>
+            <span>Library</span>
+            {documentCount > 0 && (
+              <span
+                style={{
+                  fontSize: '0.68rem',
+                  fontWeight: 700,
+                  background: 'rgba(99, 102, 241, 0.25)',
+                  color: '#c7d2fe',
+                  padding: '1px 5px',
+                  borderRadius: '999px',
+                }}
+              >
+                {documentCount}
+              </span>
+            )}
           </button>
 
-          {/* User Authentication Control */}
+          {/* User Sign In / Profile */}
           {currentUser ? (
             <div
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: '10px',
-                padding: '4px 8px 4px 6px',
+                gap: '8px',
+                padding: '3px 8px 3px 4px',
                 background: 'rgba(99, 102, 241, 0.08)',
                 border: '1px solid rgba(99, 102, 241, 0.25)',
                 borderRadius: 'var(--radius-full)',
@@ -217,16 +190,16 @@ export function Header({
             >
               <div
                 style={{
-                  width: '28px',
-                  height: '28px',
+                  width: '24px',
+                  height: '24px',
                   borderRadius: '50%',
-                  background: 'linear-gradient(135deg, #6366f1, #a855f7)',
+                  background: currentUser.user_type === 'employee' ? '#4f46e5' : '#059669',
                   color: '#ffffff',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   fontWeight: 700,
-                  fontSize: '0.75rem',
+                  fontSize: '0.7rem',
                 }}
               >
                 {currentUser.name
@@ -236,52 +209,38 @@ export function Header({
                   .slice(0, 2)
                   .toUpperCase()}
               </div>
-              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.1 }}>
-                <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
-                  {currentUser.name}
-                </span>
-                <span style={{ fontSize: '0.65rem', color: '#a5b4fc', textTransform: 'capitalize' }}>
-                  {currentUser.role.replace('_', ' ')}
-                </span>
-              </div>
+              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+                {currentUser.name.split(' ')[0]}
+              </span>
               <button
                 onClick={onLogout}
+                title="Sign out"
                 style={{
                   background: 'transparent',
                   border: 'none',
-                  color: '#9ca3af',
-                  fontSize: '0.72rem',
+                  color: 'var(--text-muted)',
                   cursor: 'pointer',
-                  padding: '4px 6px',
-                  borderRadius: '4px',
-                  transition: 'color 0.15s ease',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
                 }}
-                onMouseEnter={(e) => (e.currentTarget.style.color = '#ef4444')}
-                onMouseLeave={(e) => (e.currentTarget.style.color = '#9ca3af')}
-                title="Sign Out"
+                onMouseEnter={(e) => (e.currentTarget.style.color = 'var(--status-error)')}
+                onMouseLeave={(e) => (e.currentTarget.style.color = 'var(--text-muted)')}
               >
-                Logout
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                  <polyline points="16 17 21 12 16 7" />
+                  <line x1="21" y1="12" x2="9" y2="12" />
+                </svg>
               </button>
             </div>
           ) : (
             <button
               onClick={onOpenLoginModal}
-              className="btn-primary"
-              style={{
-                padding: '7px 14px',
-                fontSize: '0.825rem',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '6px',
-                background: 'linear-gradient(135deg, #6366f1, #4f46e5)',
-              }}
-              title="Sign in as an employee"
+              className="btn btn-primary"
+              style={{ padding: '6px 14px', fontSize: '0.8rem', height: '32px' }}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="11" x="3" y="11" rx="2" ry="2" />
-                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-              </svg>
-              <span>Sign In</span>
+              Sign In
             </button>
           )}
         </div>

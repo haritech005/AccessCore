@@ -200,9 +200,10 @@ export async function askQuestion(
     user_groups?: string[];
     token?: string;
     audience?: AudienceMode;
+    conversation_id?: string;
   }
 ): Promise<{
-  data: RAGAnswerResponse | null;
+  data: (RAGAnswerResponse & { conversation_id?: string }) | null;
   error: string | null;
 }> {
   try {
@@ -224,6 +225,7 @@ export async function askQuestion(
         tenant_scope: options?.tenant_scope,
         user_groups: options?.user_groups,
         audience: options?.audience,
+        conversation_id: options?.conversation_id,
       }),
       cache: 'no-store',
     });
@@ -368,6 +370,163 @@ export async function uploadDocument(
     return {
       data: null,
       error: err instanceof Error ? err.message : 'Document upload failed.',
+    };
+  }
+}
+
+export interface ConversationItem {
+  id: string;
+  user_id: string;
+  title: string;
+  created_at: string;
+  updated_at: string;
+  message_count?: number;
+}
+
+export interface ConversationMessageItem {
+  id: string;
+  conversation_id: string;
+  role: 'user' | 'assistant' | 'system';
+  content: string;
+  citations: Citation[];
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface ConversationDetail extends ConversationItem {
+  messages: ConversationMessageItem[];
+}
+
+/**
+ * Lists all conversations belonging to the current user.
+ */
+export async function fetchConversations(token?: string): Promise<{
+  data: ConversationItem[];
+  error: string | null;
+}> {
+  try {
+    const authHeaders = getAuthHeaders(token);
+    const res = await fetch(`${API_BASE_URL}/api/conversations`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    const json: ApiResponse<ConversationItem[]> = await res.json();
+    if (!res.ok || !json.success) {
+      return { data: [], error: json.error?.message || 'Failed to fetch conversations.' };
+    }
+
+    return { data: json.data || [], error: null };
+  } catch (err) {
+    return {
+      data: [],
+      error: err instanceof Error ? err.message : 'Failed to fetch conversations.',
+    };
+  }
+}
+
+/**
+ * Creates a new conversation thread.
+ */
+export async function createConversation(title?: string, token?: string): Promise<{
+  data: ConversationItem | null;
+  error: string | null;
+}> {
+  try {
+    const authHeaders = getAuthHeaders(token);
+    const res = await fetch(`${API_BASE_URL}/api/conversations`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      credentials: 'include',
+      body: JSON.stringify({ title }),
+      cache: 'no-store',
+    });
+
+    const json: ApiResponse<ConversationItem> = await res.json();
+    if (!res.ok || !json.success) {
+      return { data: null, error: json.error?.message || 'Failed to create conversation.' };
+    }
+
+    return { data: json.data || null, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Failed to create conversation.',
+    };
+  }
+}
+
+/**
+ * Fetches a single conversation with its full message history.
+ */
+export async function fetchConversation(id: string, token?: string): Promise<{
+  data: ConversationDetail | null;
+  error: string | null;
+}> {
+  try {
+    const authHeaders = getAuthHeaders(token);
+    const res = await fetch(`${API_BASE_URL}/api/conversations/${id}`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    const json: ApiResponse<ConversationDetail> = await res.json();
+    if (!res.ok || !json.success) {
+      return { data: null, error: json.error?.message || 'Failed to load conversation.' };
+    }
+
+    return { data: json.data || null, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err.message : 'Failed to load conversation.',
+    };
+  }
+}
+
+/**
+ * Deletes a conversation by ID.
+ */
+export async function deleteConversation(id: string, token?: string): Promise<{
+  success: boolean;
+  error: string | null;
+}> {
+  try {
+    const authHeaders = getAuthHeaders(token);
+    const res = await fetch(`${API_BASE_URL}/api/conversations/${id}`, {
+      method: 'DELETE',
+      headers: {
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    const json = await res.json();
+    if (!res.ok || !json.success) {
+      return { success: false, error: json.error?.message || 'Failed to delete conversation.' };
+    }
+
+    return { success: true, error: null };
+  } catch (err) {
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : 'Failed to delete conversation.',
     };
   }
 }
