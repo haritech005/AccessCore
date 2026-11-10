@@ -104,33 +104,6 @@ export function Header({
 
         {/* Right action controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Connection status indicator */}
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              fontSize: '0.75rem',
-              color: 'var(--text-secondary)',
-              padding: '4px 10px',
-              background: 'rgba(255, 255, 255, 0.03)',
-              borderRadius: 'var(--radius-full)',
-              border: '1px solid var(--border-subtle)',
-            }}
-          >
-            <span
-              className={`status-dot ${
-                isBackendConnected === true
-                  ? 'status-dot-active'
-                  : isBackendConnected === false
-                  ? 'status-dot-error'
-                  : 'status-dot-pending'
-              }`}
-            />
-            <span style={{ display: 'inline' }}>
-              {isBackendConnected === true ? 'Online' : isBackendConnected === false ? 'Offline' : 'Connecting'}
-            </span>
-          </div>
 
           {/* Document Library Button */}
           <button

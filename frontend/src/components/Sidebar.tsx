@@ -47,22 +47,6 @@ export function Sidebar({
 
   return (
     <>
-      {/* Mobile backdrop */}
-      {isOpen && (
-        <div
-          onClick={onToggle}
-          style={{
-            position: 'fixed',
-            inset: 0,
-            backgroundColor: 'rgba(0, 0, 0, 0.6)',
-            backdropFilter: 'blur(4px)',
-            zIndex: 40,
-            display: 'block',
-          }}
-          className="md:hidden"
-        />
-      )}
-
       {/* Sidebar container */}
       <aside
         style={{
