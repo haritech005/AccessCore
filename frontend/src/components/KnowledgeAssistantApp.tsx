@@ -51,6 +51,13 @@ export function KnowledgeAssistantApp({ initialConversationId }: KnowledgeAssist
 
   const initialLoadDone = useRef(false);
 
+  // Close sidebar by default on mobile screens
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+      setIsSidebarOpen(false);
+    }
+  }, []);
+
   // Helper to sync browser URL with active chat ID
   const updateUrl = useCallback((conversationId: string | null) => {
     if (typeof window === 'undefined') return;
@@ -114,10 +121,18 @@ export function KnowledgeAssistantApp({ initialConversationId }: KnowledgeAssist
   // Handle selecting a conversation from the sidebar or link
   const handleSelectConversation = useCallback(
     async (conversationId: string, shouldUpdateUrl: boolean = true) => {
-      if (conversationId === activeConversationId && messages.length > 0) return;
+      if (conversationId === activeConversationId && messages.length > 0) {
+        if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+          setIsSidebarOpen(false);
+        }
+        return;
+      }
       setActiveConversationId(conversationId);
       if (shouldUpdateUrl) {
         updateUrl(conversationId);
+      }
+      if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+        setIsSidebarOpen(false);
       }
       await loadConversationMessages(conversationId);
     },
@@ -131,6 +146,9 @@ export function KnowledgeAssistantApp({ initialConversationId }: KnowledgeAssist
       setMessages([]);
       if (shouldUpdateUrl) {
         updateUrl(null);
+      }
+      if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+        setIsSidebarOpen(false);
       }
       if (currentUser?.user_type === 'customer_user') {
         setAudienceMode('customer');
@@ -384,6 +402,9 @@ export function KnowledgeAssistantApp({ initialConversationId }: KnowledgeAssist
     handleSendMessage(prompt);
   };
 
+  const activeConversationTitle =
+    conversations.find((c) => c.id === activeConversationId)?.title || undefined;
+
   return (
     <div
       style={{
@@ -432,6 +453,7 @@ export function KnowledgeAssistantApp({ initialConversationId }: KnowledgeAssist
           onLogout={handleLogout}
           onToggleSidebar={() => setIsSidebarOpen((prev) => !prev)}
           isSidebarOpen={isSidebarOpen}
+          activeConversationTitle={activeConversationTitle}
         />
 
         {/* Conversational Knowledge Assistant Canvas */}

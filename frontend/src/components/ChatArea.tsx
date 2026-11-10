@@ -48,11 +48,18 @@ export function ChatArea({
 }: ChatAreaProps) {
   const [input, setInput] = useState('');
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [showScrollBottom, setShowScrollBottom] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const { scrollTop, scrollHeight, clientHeight } = e.currentTarget;
+    setShowScrollBottom(scrollHeight - scrollTop - clientHeight > 120);
   };
 
   useEffect(() => {
@@ -118,6 +125,9 @@ export function ChatArea({
     >
       {/* Messages Scroll Area */}
       <div
+        ref={scrollContainerRef}
+        onScroll={handleScroll}
+        className="chat-scroll-area"
         style={{
           flex: 1,
           overflowY: 'auto',
@@ -125,6 +135,7 @@ export function ChatArea({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          position: 'relative',
         }}
       >
         <div style={{ width: '100%', maxWidth: '820px', display: 'flex', flexDirection: 'column', gap: '24px' }}>
@@ -133,7 +144,7 @@ export function ChatArea({
             <div
               style={{
                 margin: 'auto 0',
-                padding: '60px 20px 40px',
+                padding: '40px 16px 30px',
                 textAlign: 'center',
                 display: 'flex',
                 flexDirection: 'column',
@@ -161,6 +172,7 @@ export function ChatArea({
                   ✴
                 </span>
                 <h1
+                  className="chat-hero-title"
                   style={{
                     fontSize: '2.1rem',
                     fontWeight: 500,
@@ -273,7 +285,7 @@ export function ChatArea({
               <div
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))',
                   gap: '12px',
                   width: '100%',
                   maxWidth: '680px',
@@ -542,9 +554,44 @@ export function ChatArea({
         </div>
       </div>
 
+      {/* Floating Scroll to Bottom Button (Claude Style) */}
+      {showScrollBottom && (
+        <button
+          onClick={scrollToBottom}
+          title="Scroll to bottom"
+          style={{
+            position: 'absolute',
+            bottom: messages.length > 0 ? '110px' : '30px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            backgroundColor: '#1e293b',
+            border: '1px solid rgba(255, 255, 255, 0.16)',
+            color: '#f8fafc',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 14px rgba(0, 0, 0, 0.45)',
+            zIndex: 25,
+            cursor: 'pointer',
+            transition: 'all 0.15s ease',
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = '#334155')}
+          onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = '#1e293b')}
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+            <line x1="12" y1="5" x2="12" y2="19" />
+            <polyline points="19 12 12 19 5 12" />
+          </svg>
+        </button>
+      )}
+
       {/* Floating Bottom Input Bar (When Messages Exist) */}
       {messages.length > 0 && (
         <div
+          className="chat-input-sticky-footer"
           style={{
             padding: '12px 20px 20px',
             backgroundColor: '#0a0d14',

@@ -47,8 +47,18 @@ export function Sidebar({
 
   return (
     <>
+      {/* Mobile backdrop (only active on <= 768px via media query) */}
+      {isOpen && (
+        <div
+          onClick={onToggle}
+          className="sidebar-backdrop"
+          aria-label="Close sidebar backdrop"
+        />
+      )}
+
       {/* Sidebar container */}
       <aside
+        className={`sidebar-container ${isOpen ? 'sidebar-open' : 'sidebar-closed'}`}
         style={{
           width: isOpen ? '270px' : '0px',
           minWidth: isOpen ? '270px' : '0px',
@@ -105,24 +115,46 @@ export function Sidebar({
               </div>
             </div>
 
-            {/* Collapse toggle */}
-            <button
-              onClick={onToggle}
-              title="Close sidebar"
-              style={{
-                color: '#94a3b8',
-                padding: '6px',
-                borderRadius: '6px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <rect width="18" height="18" x="3" y="3" rx="2" />
-                <path d="M9 3v18" />
-              </svg>
-            </button>
+            {/* Desktop Collapse toggle & Mobile Close Button */}
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <button
+                onClick={onToggle}
+                className="sidebar-mobile-close-btn"
+                title="Close sidebar"
+                style={{
+                  color: '#94a3b8',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+
+              <button
+                onClick={onToggle}
+                className="hidden md:flex"
+                title="Collapse sidebar"
+                style={{
+                  color: '#94a3b8',
+                  padding: '6px',
+                  borderRadius: '6px',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect width="18" height="18" x="3" y="3" rx="2" />
+                  <path d="M9 3v18" />
+                </svg>
+              </button>
+            </div>
           </div>
 
           {/* "+ New Chat" Button */}

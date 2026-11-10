@@ -12,6 +12,7 @@ interface HeaderProps {
   onLogout: () => void;
   onToggleSidebar?: () => void;
   isSidebarOpen?: boolean;
+  activeConversationTitle?: string;
 }
 
 export function Header({
@@ -23,6 +24,7 @@ export function Header({
   onLogout,
   onToggleSidebar,
   isSidebarOpen,
+  activeConversationTitle,
 }: HeaderProps) {
   return (
     <header
@@ -39,19 +41,20 @@ export function Header({
       <div
         style={{
           width: '100%',
-          padding: '0 20px',
+          padding: '0 16px',
           height: '100%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          gap: '12px',
         }}
       >
         {/* Left Side: Sidebar Toggle & Brand */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0 }}>
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
-              title={isSidebarOpen ? 'Hide sidebar' : 'Open sidebar'}
+              title={isSidebarOpen ? 'Toggle sidebar' : 'Open sidebar'}
               style={{
                 padding: '7px',
                 borderRadius: '7px',
@@ -63,6 +66,7 @@ export function Header({
                 justifyContent: 'center',
                 cursor: 'pointer',
                 transition: 'all 0.15s ease',
+                flexShrink: 0,
               }}
               onMouseEnter={(e) => {
                 e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
@@ -80,11 +84,12 @@ export function Header({
             </button>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
             <span style={{ fontSize: '0.95rem', fontWeight: 700, letterSpacing: '-0.02em', color: 'var(--text-primary)' }}>
               AccessCore
             </span>
             <span
+              className="header-brand-tag"
               style={{
                 fontSize: '0.65rem',
                 fontWeight: 700,
@@ -100,16 +105,49 @@ export function Header({
               Knowledge AI
             </span>
           </div>
+
+          {/* Claude-Style Chat Title in Header */}
+          {activeConversationTitle && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 8px',
+                backgroundColor: 'rgba(255, 255, 255, 0.03)',
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '6px',
+                minWidth: 0,
+              }}
+            >
+              <span
+                style={{
+                  fontSize: '0.8rem',
+                  fontWeight: 500,
+                  color: '#cbd5e1',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: '220px',
+                }}
+                title={activeConversationTitle}
+              >
+                {activeConversationTitle}
+              </span>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" color="#64748b" style={{ flexShrink: 0 }}>
+                <path d="m6 9 6 6 6-6" />
+              </svg>
+            </div>
+          )}
         </div>
 
         {/* Right action controls */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
           {/* Document Library Button */}
           <button
             onClick={onOpenKnowledgeDrawer}
             style={{
-              padding: '6px 12px',
+              padding: '6px 10px',
               fontSize: '0.8rem',
               display: 'flex',
               alignItems: 'center',
@@ -126,12 +164,12 @@ export function Header({
             onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)')}
             title="Inspect permitted knowledge documents"
           >
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1-2.5-2.5Z" />
               <path d="M6 6h10" />
               <path d="M6 10h10" />
             </svg>
-            <span>Library</span>
+            <span className="header-btn-text">Library</span>
             {documentCount > 0 && (
               <span
                 style={{
@@ -173,6 +211,7 @@ export function Header({
                   justifyContent: 'center',
                   fontWeight: 700,
                   fontSize: '0.7rem',
+                  flexShrink: 0,
                 }}
               >
                 {currentUser.name
@@ -182,7 +221,7 @@ export function Header({
                   .slice(0, 2)
                   .toUpperCase()}
               </div>
-              <span style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
+              <span className="header-user-name" style={{ fontSize: '0.78rem', fontWeight: 600, color: 'var(--text-primary)' }}>
                 {currentUser.name.split(' ')[0]}
               </span>
               <button
