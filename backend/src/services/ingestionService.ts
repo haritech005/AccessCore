@@ -19,11 +19,29 @@ export class IngestionError extends Error {
   }
 }
 
+const MAX_RECOVERY_SNAPSHOT_BYTES = 2 * 1024 * 1024;
+
+export function sanitizeIngestionError(raw: string): string {
+  const withoutStack = raw.split(/\r?\n\s+at\s+/)[0] || raw;
+  const withoutPaths = withoutStack
+    .replace(/[A-Za-z]:\\[^\s)'"]+/g, '[path]')
+    .replace(/\/(?:Users|home|app|var|tmp|etc|usr|opt)\/[^\s)'"]+/g, '[path]');
+  const clean = withoutPaths.replace(/\s+/g, ' ').trim();
+  return clean.length > 500 ? `${clean.slice(0, 497)}...` : clean || 'Ingestion failed.';
+}
+
 export interface IngestDocumentInput {
   filename: string;
   buffer: Buffer;
   overrideMetadata?: Partial<DocumentMetadata>;
   simulateProcessingFailure?: boolean;
+  forceReembed?: boolean;
+  jobType?: 'ingest' | 'retry' | 'reindex';
+  attemptCount?: number;
+  maxAttempts?: number;
+  parentJobId?: string;
+  initiatedBy?: string;
+  preserveExistingPermissions?: boolean;
 }
 
 export interface IngestDocumentOutput {
@@ -93,7 +111,19 @@ export class IngestionService {
    * 10. Preserves previous active version and chunks if update fails.
    */
   async ingestDocument(input: IngestDocumentInput): Promise<IngestDocumentOutput> {
-    const { filename, buffer, overrideMetadata, simulateProcessingFailure } = input;
+    const {
+      filename,
+      buffer,
+      overrideMetadata,
+      simulateProcessingFailure,
+      forceReembed = false,
+      jobType = 'ingest',
+      attemptCount = 1,
+      maxAttempts = 3,
+      parentJobId = null,
+      initiatedBy = null,
+      preserveExistingPermissions = false,
+    } = input;
 
     // 1. Parse and validate document
     const parsed: ParsedDocument = await parseDocument({
@@ -113,6 +143,7 @@ export class IngestionService {
     let docUuid: string;
     let targetVersion: number;
     let isNewDoc = false;
+    let preservedActiveFlag = parsed.metadata.is_active !== false;
 
     if (existingDocRes.rows.length === 0) {
       // Create new logical document record in pending status
@@ -138,14 +169,41 @@ export class IngestionService {
       const existingDoc = existingDocRes.rows[0];
       docUuid = existingDoc.id;
 
-      // Check current active version for identical content hash
+      // Preserve authoritative document_permissions ACLs if requested (e.g. during retry/reindex)
+      if (preserveExistingPermissions) {
+        const permRes = await query<{
+          tenant_id: string;
+          allowed_groups: string[];
+          sensitivity: string;
+          disclosure_policy: string;
+          is_active: boolean;
+        }>(
+          `SELECT tenant_id, allowed_groups, sensitivity, disclosure_policy, is_active
+           FROM document_permissions WHERE document_id = $1 LIMIT 1`,
+          [docUuid]
+        );
+        if (permRes.rows.length > 0) {
+          const perm = permRes.rows[0];
+          parsed.metadata = {
+            ...parsed.metadata,
+            tenant_id: perm.tenant_id,
+            allowed_groups: perm.allowed_groups,
+            sensitivity: perm.sensitivity as DocumentMetadata['sensitivity'],
+            disclosure_policy: perm.disclosure_policy as DocumentMetadata['disclosure_policy'],
+            is_active: perm.is_active,
+          };
+          preservedActiveFlag = perm.is_active;
+        }
+      }
+
+      // Check current active version for identical content hash (unless forceReembed is set)
       const activeVerRes = await query<{ id: string; version: number; content_hash: string }>(
         'SELECT id, version, content_hash FROM document_versions WHERE document_id = $1 AND status = \'active\'',
         [docUuid]
       );
 
       const activeVer = activeVerRes.rows[0];
-      if (activeVer && activeVer.content_hash === parsed.content_hash) {
+      if (!forceReembed && activeVer && activeVer.content_hash === parsed.content_hash) {
         // Content hash matches active version. Short-circuit safely without creating duplicate version.
         const chunkCountRes = await query<{ count: string }>(
           'SELECT count(*) FROM document_chunks WHERE version_id = $1 AND is_active = true',
@@ -155,10 +213,19 @@ export class IngestionService {
 
         const jobRes = await query<{ id: string }>(
           `INSERT INTO ingestion_jobs (
-            document_id, version_id, status, error_message, started_at, completed_at
-          ) VALUES ($1, $2, 'completed', NULL, NOW(), NOW())
+            document_id, version_id, status, error_message, job_type, attempt_count, max_attempts, parent_job_id, initiated_by, chunks_total, chunks_reused, started_at, completed_at
+          ) VALUES ($1, $2, 'completed', NULL, $3, $4, $5, $6, $7, $8, $8, NOW(), NOW())
           RETURNING id`,
-          [docUuid, activeVer.id]
+          [
+            docUuid,
+            activeVer.id,
+            jobType,
+            attemptCount,
+            maxAttempts,
+            parentJobId,
+            initiatedBy,
+            activeChunksCount,
+          ]
         );
 
         return {
@@ -178,16 +245,49 @@ export class IngestionService {
         };
       }
 
-      // If document was previously completed, increment version
-      targetVersion = existingDoc.current_version + 1;
+      // Compute next monotonic version number across ALL document_versions (prevents unique constraint collision after failed attempts)
+      const maxVerRes = await query<{ max_ver: number }>(
+        'SELECT COALESCE(MAX(version), 0) AS max_ver FROM document_versions WHERE document_id = $1',
+        [docUuid]
+      );
+      targetVersion = Number(maxVerRes.rows[0]?.max_ver || existingDoc.current_version || 0) + 1;
     }
+
+    // Store bounded recovery snapshot on active/failed jobs so retries work safely without re-uploading
+    const recoverySnapshot =
+      buffer.length <= MAX_RECOVERY_SNAPSHOT_BYTES
+        ? {
+            filename: parsed.filename,
+            content_base64: buffer.toString('base64'),
+            override_metadata: {
+              ...(overrideMetadata || {}),
+              document_id: parsed.document_id,
+              title: parsed.title,
+              document_type: parsed.metadata.document_type,
+              tenant_id: parsed.metadata.tenant_id,
+              owner_team: parsed.metadata.owner_team,
+              allowed_groups: parsed.metadata.allowed_groups,
+              sensitivity: parsed.metadata.sensitivity,
+              disclosure_policy: parsed.metadata.disclosure_policy,
+            },
+          }
+        : null;
 
     // 3. Create ingestion job
     const jobRes = await query<{ id: string }>(
-      `INSERT INTO ingestion_jobs (document_id, status, started_at)
-       VALUES ($1, 'processing', NOW())
-       RETURNING id`,
-      [docUuid]
+      `INSERT INTO ingestion_jobs (
+        document_id, status, job_type, attempt_count, max_attempts, parent_job_id, initiated_by, source_snapshot, started_at
+      ) VALUES ($1, 'processing', $2, $3, $4, $5, $6, $7::jsonb, NOW())
+      RETURNING id`,
+      [
+        docUuid,
+        jobType,
+        attemptCount,
+        maxAttempts,
+        parentJobId,
+        initiatedBy,
+        recoverySnapshot ? JSON.stringify(recoverySnapshot) : null,
+      ]
     );
     const jobId = jobRes.rows[0].id;
 
@@ -221,24 +321,26 @@ export class IngestionService {
         throw new Error('Chunking resulted in 0 chunks for document.');
       }
 
-      // 5b. Embedding Cache Check (Reuse existing chunk vectors from active version if unchanged)
-      const cachedVectorsRes = await query<{ chunk_hash: string; embedding: string }>(
-        `SELECT metadata->>'chunk_hash' AS chunk_hash, embedding::text
-         FROM document_chunks
-         WHERE document_id = $1 AND is_active = true`,
-        [docUuid]
-      );
-
+      // 5b. Embedding Cache Check (Reuse existing chunk vectors unless forceReembed is true)
       const cachedEmbeddingMap = new Map<string, number[]>();
-      for (const row of cachedVectorsRes.rows) {
-        if (row.chunk_hash && row.embedding) {
-          try {
-            const vec = JSON.parse(row.embedding) as number[];
-            if (Array.isArray(vec) && vec.length === EMBEDDING_DIMENSION) {
-              cachedEmbeddingMap.set(row.chunk_hash, vec);
+      if (!forceReembed) {
+        const cachedVectorsRes = await query<{ chunk_hash: string; embedding: string }>(
+          `SELECT metadata->>'chunk_hash' AS chunk_hash, embedding::text
+           FROM document_chunks
+           WHERE document_id = $1 AND is_active = true`,
+          [docUuid]
+        );
+
+        for (const row of cachedVectorsRes.rows) {
+          if (row.chunk_hash && row.embedding) {
+            try {
+              const vec = JSON.parse(row.embedding) as number[];
+              if (Array.isArray(vec) && vec.length === EMBEDDING_DIMENSION) {
+                cachedEmbeddingMap.set(row.chunk_hash, vec);
+              }
+            } catch {
+              // Ignore vector deserialization errors
             }
-          } catch {
-            // Ignore vector deserialization errors
           }
         }
       }
@@ -271,7 +373,19 @@ export class IngestionService {
         });
       }
 
-      // 5d. Persist staged chunks to PostgreSQL (inactive until atomic publication)
+      // 5d. Verify ALL vectors exist cleanly before staging any chunk (guards partial failure)
+      for (let i = 0; i < chunks.length; i++) {
+        const vec = chunkEmbeddings[i];
+        if (
+          !Array.isArray(vec) ||
+          vec.length !== EMBEDDING_DIMENSION ||
+          vec.some((v) => typeof v !== 'number' || !Number.isFinite(v))
+        ) {
+          throw new Error(`Incomplete or invalid embedding generated for chunk ${i}. Aborting publication.`);
+        }
+      }
+
+      // Persist staged chunks to PostgreSQL (inactive until atomic publication)
       for (let i = 0; i < chunks.length; i++) {
         const chunk = chunks[i];
         const embedding = chunkEmbeddings[i]!;
@@ -287,7 +401,13 @@ export class IngestionService {
             chunk.chunk_index,
             chunk.content,
             vectorLiteral,
-            JSON.stringify(chunk.metadata),
+            JSON.stringify({
+              ...chunk.metadata,
+              tenant_id: parsed.metadata.tenant_id,
+              allowed_groups: parsed.metadata.allowed_groups,
+              sensitivity: parsed.metadata.sensitivity,
+              disclosure_policy: parsed.metadata.disclosure_policy,
+            }),
           ]
         );
       }
@@ -322,12 +442,12 @@ export class IngestionService {
           [versionUuid]
         );
 
-        // 6d. Activate the new chunks
+        // 6d. Activate the new chunks (matching preserved document active status)
         await client.query(
           `UPDATE document_chunks 
-           SET is_active = true 
+           SET is_active = $2 
            WHERE version_id = $1`,
-          [versionUuid]
+          [versionUuid, preservedActiveFlag]
         );
 
         // 6e. Update parent document logical record
@@ -357,13 +477,13 @@ export class IngestionService {
         await client.query(
           `INSERT INTO document_permissions (
             document_id, tenant_id, allowed_groups, sensitivity, disclosure_policy, is_active
-          ) VALUES ($1, $2, $3, $4, $5, true)
+          ) VALUES ($1, $2, $3, $4, $5, $6)
           ON CONFLICT (document_id) DO UPDATE SET
             tenant_id = EXCLUDED.tenant_id,
             allowed_groups = EXCLUDED.allowed_groups,
             sensitivity = EXCLUDED.sensitivity,
             disclosure_policy = EXCLUDED.disclosure_policy,
-            is_active = true,
+            is_active = EXCLUDED.is_active,
             updated_at = NOW()`,
           [
             docUuid,
@@ -371,6 +491,7 @@ export class IngestionService {
             meta.allowed_groups || ['grp_all_employees'],
             meta.sensitivity || 'internal',
             meta.disclosure_policy || 'internal_only',
+            preservedActiveFlag,
           ]
         );
 
@@ -396,13 +517,24 @@ export class IngestionService {
           );
         }
 
-        // 6h. Mark ingestion job completed
+        // 6h. Mark ingestion job completed and clear sensitive recovery snapshot
         await client.query(
           `UPDATE ingestion_jobs 
-           SET status = 'completed', completed_at = NOW() 
+           SET status = 'completed',
+               chunks_total = $2,
+               chunks_reused = $3,
+               source_snapshot = NULL,
+               completed_at = NOW()
            WHERE id = $1`,
-          [jobId]
+          [jobId, chunks.length, reusedCount]
         );
+
+        if (parentJobId) {
+          await client.query(
+            `UPDATE ingestion_jobs SET source_snapshot = NULL WHERE id = $1`,
+            [parentJobId]
+          );
+        }
 
         await client.query('COMMIT');
       } catch (txErr) {
@@ -428,22 +560,23 @@ export class IngestionService {
         completed_at: new Date().toISOString(),
       };
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : String(err);
+      const rawErrorMsg = err instanceof Error ? err.message : String(err);
+      const safeErrorMsg = sanitizeIngestionError(rawErrorMsg);
 
       // Mark the staged version as failed
       await query(
         `UPDATE document_versions 
          SET status = 'failed', error_message = $1 
          WHERE id = $2`,
-        [errorMsg, versionUuid]
+        [safeErrorMsg, versionUuid]
       );
 
-      // Mark the ingestion job as failed
+      // Mark the ingestion job as failed (preserves recovery source_snapshot so admin retry can recover)
       await query(
         `UPDATE ingestion_jobs 
          SET status = 'failed', error_message = $1, completed_at = NOW() 
          WHERE id = $2`,
-        [errorMsg, jobId]
+        [safeErrorMsg, jobId]
       );
 
       // Clean up uncommitted staged chunks for this failed version
@@ -455,13 +588,13 @@ export class IngestionService {
           `UPDATE documents 
            SET status = 'failed', error_message = $1, updated_at = NOW() 
            WHERE id = $2`,
-          [errorMsg, docUuid]
+          [safeErrorMsg, docUuid]
         );
       }
       // If it was an update to an existing document, the previous active version and its chunks remain untouched!
 
       throw new IngestionError(
-        `Ingestion failed for '${filename}': ${errorMsg}`,
+        `Ingestion failed for '${filename}': ${safeErrorMsg}`,
         'INGESTION_FAILED',
         500,
         jobId

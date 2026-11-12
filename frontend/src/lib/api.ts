@@ -1154,3 +1154,141 @@ export function toggleAdminDocumentArchive(idOrCode: string, isActive: boolean, 
     token
   );
 }
+
+// =========================================================================
+// Admin Ingestion Monitoring & Operational Recovery API (Subphase 5.6)
+// =========================================================================
+
+export interface IngestionHealthMetrics {
+  total_documents: number;
+  completed_documents: number;
+  failed_documents: number;
+  active_jobs: number;
+  failed_jobs: number;
+  stale_processing_jobs: number;
+  stale_active_chunks: number;
+  obsolete_inactive_chunks: number;
+  acl_desynced_documents: number;
+}
+
+export interface AdminIngestionJobSummary {
+  id: string;
+  document_uuid: string;
+  document_id: string;
+  document_title: string;
+  filename: string;
+  format: string;
+  version: number | null;
+  version_status: string | null;
+  status: string;
+  job_type: string;
+  attempt_count: number;
+  max_attempts: number;
+  parent_job_id: string | null;
+  initiated_by: string | null;
+  chunks_total: number;
+  chunks_reused: number;
+  active_chunks_count: number;
+  has_recovery_snapshot: boolean;
+  can_retry: boolean;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+  duration_ms: number | null;
+}
+
+export interface AdminIngestionJobDetail {
+  job: AdminIngestionJobSummary & {
+    document_status: string;
+    current_version: number;
+    retry_block_reason: string | null;
+  };
+  versions: AdminDocumentVersionEntry[];
+  audit_history: AdminDocumentAuditEntry[];
+}
+
+export function fetchAdminIngestionJobs(
+  filters: { status?: string; job_type?: string; search?: string; page?: number; limit?: number } = {},
+  token?: string
+) {
+  const params = new URLSearchParams();
+  if (filters.status && filters.status !== 'all') params.set('status', filters.status);
+  if (filters.job_type && filters.job_type !== 'all') params.set('job_type', filters.job_type);
+  if (filters.search) params.set('search', filters.search);
+  if (filters.page) params.set('page', String(filters.page));
+  if (filters.limit) params.set('limit', String(filters.limit));
+
+  const qs = params.toString();
+  return adminFetch<{
+    jobs: AdminIngestionJobSummary[];
+    total: number;
+    page: number;
+    limit: number;
+    health: IngestionHealthMetrics;
+  }>(`/api/admin/ingestion/jobs${qs ? `?${qs}` : ''}`, { method: 'GET' }, token);
+}
+
+export function fetchAdminIngestionJobDetail(jobId: string, token?: string) {
+  return adminFetch<AdminIngestionJobDetail>(
+    `/api/admin/ingestion/jobs/${encodeURIComponent(jobId)}`,
+    { method: 'GET' },
+    token
+  );
+}
+
+export function retryAdminIngestionJob(jobId: string, token?: string) {
+  return adminFetch<{
+    job_id: string;
+    document_id: string;
+    version: number;
+    status: string;
+    chunks_count: number;
+    message: string;
+  }>(`/api/admin/ingestion/jobs/${encodeURIComponent(jobId)}/retry`, { method: 'POST', body: {} }, token);
+}
+
+export function reindexAdminDocument(
+  idOrCode: string,
+  options: { force_reembed?: boolean } = { force_reembed: true },
+  token?: string
+) {
+  return adminFetch<{
+    job_id: string;
+    document_id: string;
+    version: number;
+    status: string;
+    chunks_count: number;
+    message: string;
+  }>(`/api/admin/documents/${encodeURIComponent(idOrCode)}/reindex`, { method: 'POST', body: options }, token);
+}
+
+export function batchReindexAdminDocuments(
+  payload: { document_ids?: string[]; tenant_id?: string; force_reembed?: boolean },
+  token?: string
+) {
+  return adminFetch<{
+    total_requested: number;
+    succeeded: number;
+    failed: number;
+    results: Array<{
+      document_id: string;
+      status: 'succeeded' | 'failed';
+      job_id?: string;
+      version?: number;
+      chunks_count?: number;
+      error?: string;
+    }>;
+  }>('/api/admin/ingestion/reindex-batch', { method: 'POST', body: payload }, token);
+}
+
+export function cleanupStaleAdminIndexes(token?: string) {
+  return adminFetch<{
+    cleaned: {
+      deactivated_stale_chunks: number;
+      resynced_acl_chunks: number;
+      purged_obsolete_chunks: number;
+      recovered_stale_jobs: number;
+    };
+    health: IngestionHealthMetrics;
+  }>('/api/admin/ingestion/cleanup', { method: 'POST', body: {} }, token);
+}

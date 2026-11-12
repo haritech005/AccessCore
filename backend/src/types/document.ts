@@ -75,6 +75,7 @@ export const DocumentMetadataSchema = z
     created_at: z.string().datetime({ offset: true }),
     updated_at: z.string().datetime({ offset: true }),
     version: z.string().default('1.0'),
+    is_active: z.boolean().optional(),
   })
   .refine(
     (data) => {

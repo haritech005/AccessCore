@@ -83,6 +83,12 @@ const REGRESSION_SUITES = [
     script: 'npm run admin:documents:test',
     phase: 'Phase 5: Productization & Release',
   },
+  // Subphase 5.6: Ingestion Monitoring & Operational Recovery
+  {
+    name: 'Admin Ingestion Monitoring & Recovery Suite (11 Tests)',
+    script: 'npm run admin:ingestion:test',
+    phase: 'Phase 5: Productization & Release',
+  },
 ];
 
 async function runMasterRegression() {

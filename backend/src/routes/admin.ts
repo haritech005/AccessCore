@@ -4,6 +4,7 @@ import { requireAuth, requireAdmin, verifyAdminCsrf } from '../middleware/auth';
 import { AppError } from '../middleware/errorHandler';
 import { adminIdentityService } from '../services/adminIdentityService';
 import { adminDocumentService } from '../services/adminDocumentService';
+import { adminIngestionService } from '../services/adminIngestionService';
 
 function extractAuditMeta(req: Request) {
   const correlationId =
@@ -552,6 +553,139 @@ router.post(
         extractAuditMeta(req)
       );
       res.status(200).json({ success: true, data: detail });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/admin/documents/:id/reindex
+ * Safely re-indexes a document while preserving authoritative ACLs and preventing duplicate chunks.
+ */
+router.post(
+  '/documents/:id/reindex',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await adminIngestionService.reindexDocument(
+        req.user!,
+        String(req.params.id),
+        extractAuditMeta(req),
+        {
+          content: typeof req.body?.content === 'string' ? req.body.content : undefined,
+          is_base64: Boolean(req.body?.is_base64),
+          force_reembed: req.body?.force_reembed !== false,
+        }
+      );
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/ingestion/jobs
+ * Lists ingestion/recovery jobs with filtering and aggregate index health diagnostics.
+ */
+router.get('/ingestion/jobs', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await adminIngestionService.listJobsAndHealth({
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      job_type: typeof req.query.job_type === 'string' ? req.query.job_type : undefined,
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      page: req.query.page ? Number(req.query.page) : 1,
+      limit: req.query.limit ? Number(req.query.limit) : 25,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/ingestion/jobs/:jobId
+ * Returns sanitized diagnostic details, versions, and audit history for one ingestion job.
+ */
+router.get(
+  '/ingestion/jobs/:jobId',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const detail = await adminIngestionService.getJobDetail(String(req.params.jobId));
+      res.status(200).json({ success: true, data: detail });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/admin/ingestion/jobs/:jobId/retry
+ * Retries a failed ingestion job cleanly within configured retry bounds.
+ */
+router.post(
+  '/ingestion/jobs/:jobId/retry',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await adminIngestionService.retryFailedJob(
+        req.user!,
+        String(req.params.jobId),
+        extractAuditMeta(req),
+        {
+          content: typeof req.body?.content === 'string' ? req.body.content : undefined,
+          is_base64: Boolean(req.body?.is_base64),
+        }
+      );
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/admin/ingestion/reindex-batch
+ * Sequentially re-indexes a filtered or explicit selection of completed documents (max 25).
+ */
+router.post(
+  '/ingestion/reindex-batch',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await adminIngestionService.batchReindex(
+        req.user!,
+        extractAuditMeta(req),
+        {
+          document_ids: Array.isArray(req.body?.document_ids) ? req.body.document_ids : undefined,
+          tenant_id: typeof req.body?.tenant_id === 'string' ? req.body.tenant_id : undefined,
+          force_reembed: req.body?.force_reembed !== false,
+        }
+      );
+      res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/admin/ingestion/cleanup
+ * Deactivates stale active chunks, resyncs ACL drift, purges obsolete chunks, and recovers stale processing jobs.
+ */
+router.post(
+  '/ingestion/cleanup',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const result = await adminIngestionService.cleanupStaleIndexes(
+        req.user!,
+        extractAuditMeta(req),
+        {
+          stale_threshold_minutes:
+            req.body?.stale_threshold_minutes !== undefined
+              ? Number(req.body.stale_threshold_minutes)
+              : undefined,
+        }
+      );
+      res.status(200).json({ success: true, data: result });
     } catch (err) {
       next(err);
     }
