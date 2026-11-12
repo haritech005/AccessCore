@@ -1292,3 +1292,117 @@ export function cleanupStaleAdminIndexes(token?: string) {
     health: IngestionHealthMetrics;
   }>('/api/admin/ingestion/cleanup', { method: 'POST', body: {} }, token);
 }
+
+// =========================================================================
+// Admin Audit Logs & Telemetry API (Subphase 5.7)
+// =========================================================================
+
+export interface AdminAuditRecord {
+  id: string;
+  created_at: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  actor_role: string | null;
+  action: string;
+  target_type: string;
+  target_id: string | null;
+  outcome: 'success' | 'denied' | 'error';
+  correlation_id: string | null;
+  ip_address: string | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface AdminAuditStats {
+  total: number;
+  outcomes: {
+    success: number;
+    denied: number;
+    error: number;
+  };
+  recent_24h_count: number;
+  top_actions: Array<{ action: string; count: number }>;
+  top_actors: Array<{ actor_id: string; actor_email: string; count: number }>;
+}
+
+export interface AdminAuditListFilters {
+  action?: string;
+  outcome?: string;
+  target_type?: string;
+  target_id?: string;
+  actor_id?: string;
+  search?: string;
+  start_date?: string;
+  end_date?: string;
+  correlation_id?: string;
+  page?: number;
+  limit?: number;
+}
+
+export function fetchAdminAuditLogs(filters: AdminAuditListFilters = {}, token?: string) {
+  const params = new URLSearchParams();
+  if (filters.action && filters.action !== 'all') params.set('action', filters.action);
+  if (filters.outcome && filters.outcome !== 'all') params.set('outcome', filters.outcome);
+  if (filters.target_type && filters.target_type !== 'all') params.set('target_type', filters.target_type);
+  if (filters.target_id) params.set('target_id', filters.target_id);
+  if (filters.actor_id) params.set('actor_id', filters.actor_id);
+  if (filters.correlation_id) params.set('correlation_id', filters.correlation_id);
+  if (filters.search) params.set('search', filters.search);
+  if (filters.start_date) params.set('start_date', filters.start_date);
+  if (filters.end_date) params.set('end_date', filters.end_date);
+  if (filters.page) params.set('page', String(filters.page));
+  if (filters.limit) params.set('limit', String(filters.limit));
+
+  const qs = params.toString();
+  return adminFetch<{
+    events: AdminAuditRecord[];
+    total: number;
+    page: number;
+    limit: number;
+  }>(`/api/admin/audit-logs${qs ? `?${qs}` : ''}`, { method: 'GET' }, token);
+}
+
+export function fetchAdminAuditStats(token?: string) {
+  return adminFetch<AdminAuditStats>('/api/admin/audit-logs/stats', { method: 'GET' }, token);
+}
+
+export async function downloadAdminAuditExport(
+  format: 'json' | 'csv' = 'json',
+  filters: AdminAuditListFilters = {},
+  token?: string
+): Promise<{ success: boolean; filename: string; blob?: Blob; error?: string }> {
+  try {
+    const params = new URLSearchParams();
+    params.set('format', format);
+    if (filters.action && filters.action !== 'all') params.set('action', filters.action);
+    if (filters.outcome && filters.outcome !== 'all') params.set('outcome', filters.outcome);
+    if (filters.target_type && filters.target_type !== 'all') params.set('target_type', filters.target_type);
+    if (filters.search) params.set('search', filters.search);
+
+    const headers: Record<string, string> = {};
+    const bearer = token || getStoredToken();
+    if (bearer) {
+      headers.Authorization = `Bearer ${bearer}`;
+    }
+
+    const res = await fetch(`/api/admin/audit-logs/export?${params.toString()}`, {
+      method: 'GET',
+      headers,
+    });
+
+    if (!res.ok) {
+      return { success: false, filename: '', error: `Export failed (${res.status})` };
+    }
+
+    const disposition = res.headers.get('content-disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/);
+    const filename = match ? match[1] : `audit-export.${format}`;
+    const blob = await res.blob();
+    return { success: true, filename, blob };
+  } catch (err) {
+    return {
+      success: false,
+      filename: '',
+      error: err instanceof Error ? err.message : 'Export failed.',
+    };
+  }
+}

@@ -89,6 +89,12 @@ const REGRESSION_SUITES = [
     script: 'npm run admin:ingestion:test',
     phase: 'Phase 5: Productization & Release',
   },
+  // Subphase 5.7: Structured Logging & Error Handling
+  {
+    name: 'Structured Logging & Audit Telemetry Suite (11 Tests)',
+    script: 'npm run admin:logging:test',
+    phase: 'Phase 5: Productization & Release',
+  },
 ];
 
 async function runMasterRegression() {

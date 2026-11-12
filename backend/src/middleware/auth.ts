@@ -1,6 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { authService } from '../services/authService';
 import { authorizationService } from '../services/authorizationService';
+import { auditService } from '../services/auditService';
 import { UserRole } from '../types/identity';
 import { config } from '../config';
 import { AppError } from './errorHandler';
@@ -124,6 +125,18 @@ export async function requireAdmin(
     await authenticateRequest(req);
     const authz = authorizationService.authorizeAdminAccess(req.user);
     if (!authz.allowed) {
+      await auditService.recordEvent({
+        actor: req.user
+          ? { id: req.user.id, email: req.user.email, role: req.user.role }
+          : undefined,
+        action: 'auth.admin_access.denied',
+        targetType: 'system',
+        targetId: `${req.method} ${req.originalUrl || req.url}`.slice(0, 120),
+        outcome: 'denied',
+        correlationId: req.correlationId || null,
+        ipAddress: req.ip || req.socket.remoteAddress || null,
+        metadata: { reason: authz.reason || 'Administrator access required.' },
+      });
       throw new AppError(
         authz.reason || 'Administrator access required.',
         403,
@@ -185,6 +198,18 @@ export function verifyAdminCsrf(
 
   // Reject any explicit untrusted Origin immediately, even on Bearer requests
   if (originHeader && !allowedOrigins.has(originHeader)) {
+    void auditService.recordEvent({
+      actor: req.user
+        ? { id: req.user.id, email: req.user.email, role: req.user.role }
+        : undefined,
+      action: 'security.csrf.blocked',
+      targetType: 'system',
+      targetId: `${req.method} ${req.originalUrl || req.url}`.slice(0, 120),
+      outcome: 'denied',
+      correlationId: req.correlationId || null,
+      ipAddress: req.ip || req.socket.remoteAddress || null,
+      metadata: { untrusted_origin: originHeader },
+    });
     next(
       new AppError(
         'Cross-origin administrative mutation blocked by CSRF policy.',

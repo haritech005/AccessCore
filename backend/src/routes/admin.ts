@@ -5,9 +5,11 @@ import { AppError } from '../middleware/errorHandler';
 import { adminIdentityService } from '../services/adminIdentityService';
 import { adminDocumentService } from '../services/adminDocumentService';
 import { adminIngestionService } from '../services/adminIngestionService';
+import { auditService } from '../services/auditService';
 
 function extractAuditMeta(req: Request) {
   const correlationId =
+    req.correlationId ||
     (typeof req.headers['x-request-id'] === 'string' && req.headers['x-request-id']) ||
     (typeof req.headers['x-correlation-id'] === 'string' && req.headers['x-correlation-id']) ||
     null;
@@ -686,6 +688,77 @@ router.post(
         }
       );
       res.status(200).json({ success: true, data: result });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/audit-logs
+ * Queries structured, immutable security and administrative events.
+ */
+router.get('/audit-logs', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await auditService.listAuditEvents({
+      action: typeof req.query.action === 'string' ? req.query.action : undefined,
+      outcome: typeof req.query.outcome === 'string' ? req.query.outcome : undefined,
+      target_type: typeof req.query.target_type === 'string' ? req.query.target_type : undefined,
+      target_id: typeof req.query.target_id === 'string' ? req.query.target_id : undefined,
+      actor_id: typeof req.query.actor_id === 'string' ? req.query.actor_id : undefined,
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      start_date: typeof req.query.start_date === 'string' ? req.query.start_date : undefined,
+      end_date: typeof req.query.end_date === 'string' ? req.query.end_date : undefined,
+      correlation_id:
+        typeof req.query.correlation_id === 'string' ? req.query.correlation_id : undefined,
+      page: req.query.page ? Number(req.query.page) : 1,
+      limit: req.query.limit ? Number(req.query.limit) : 25,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/audit-logs/stats
+ * Aggregates audit telemetry, top actors, outcomes, and recent activity.
+ */
+router.get(
+  '/audit-logs/stats',
+  async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const stats = await auditService.getAuditStats();
+      res.status(200).json({ success: true, data: stats });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/audit-logs/export
+ * Exports compliance audit logs as downloadable CSV or JSON.
+ */
+router.get(
+  '/audit-logs/export',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const format = req.query.format === 'csv' ? 'csv' : 'json';
+      const fileData = await auditService.exportAuditEvents(format, {
+        action: typeof req.query.action === 'string' ? req.query.action : undefined,
+        outcome: typeof req.query.outcome === 'string' ? req.query.outcome : undefined,
+        target_type: typeof req.query.target_type === 'string' ? req.query.target_type : undefined,
+        target_id: typeof req.query.target_id === 'string' ? req.query.target_id : undefined,
+        actor_id: typeof req.query.actor_id === 'string' ? req.query.actor_id : undefined,
+        search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        start_date: typeof req.query.start_date === 'string' ? req.query.start_date : undefined,
+        end_date: typeof req.query.end_date === 'string' ? req.query.end_date : undefined,
+      });
+
+      res.setHeader('Content-Type', fileData.contentType);
+      res.setHeader('Content-Disposition', `attachment; filename="${fileData.filename}"`);
+      res.status(200).send(fileData.content);
     } catch (err) {
       next(err);
     }

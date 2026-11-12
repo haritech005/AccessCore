@@ -1,6 +1,7 @@
 export interface ApiSuccessResponse<T> {
   success: true;
   data: T;
+  correlation_id?: string;
   timestamp: string;
 }
 
@@ -11,6 +12,7 @@ export interface ApiErrorResponse {
     message: string;
     details?: unknown;
   };
+  correlation_id?: string;
   timestamp: string;
 }
 

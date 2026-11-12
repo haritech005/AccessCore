@@ -1,18 +1,22 @@
 import { createApp } from './app';
 import { config } from './config';
+import { logger } from './services/logger';
+import { runStartupDiagnostics } from './services/startupDiagnostics';
 
 const app = createApp();
 
-const server = app.listen(config.PORT, () => {
-  console.log(`[AccessCore Backend] Server running on http://localhost:${config.PORT}`);
-  console.log(`[AccessCore Backend] Environment: ${config.NODE_ENV}`);
-  console.log(`[AccessCore Backend] Health check: http://localhost:${config.PORT}/health`);
+const server = app.listen(config.PORT, async () => {
+  logger.info(`AccessCore Backend server running on http://localhost:${config.PORT}`, {
+    port: config.PORT,
+    environment: config.NODE_ENV,
+  });
+  await runStartupDiagnostics();
 });
 
 const gracefulShutdown = (signal: string) => {
-  console.log(`[AccessCore Backend] Received ${signal}. Shutting down gracefully...`);
+  logger.info(`Received ${signal}. Shutting down gracefully...`, { signal });
   server.close(() => {
-    console.log('[AccessCore Backend] HTTP server closed.');
+    logger.info('HTTP server closed.', { signal });
     process.exit(0);
   });
 };

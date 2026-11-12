@@ -1,6 +1,7 @@
 import express, { Express } from 'express';
 import cors from 'cors';
 import { config } from './config';
+import { requestCorrelationMiddleware } from './services/logger';
 import healthRouter from './routes/health';
 import authRouter from './routes/auth';
 import documentsRouter from './routes/documents';
@@ -12,6 +13,9 @@ import { errorHandler, notFoundHandler } from './middleware/errorHandler';
 
 export function createApp(): Express {
   const app = express();
+
+  // Request correlation & access logging (captures x-request-id / x-correlation-id)
+  app.use(requestCorrelationMiddleware);
 
   app.use(
     cors({
