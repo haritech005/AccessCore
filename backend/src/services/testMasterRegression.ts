@@ -77,6 +77,12 @@ const REGRESSION_SUITES = [
     script: 'npm run admin:identity:test',
     phase: 'Phase 5: Productization & Release',
   },
+  // Subphase 5.5: Document Permissions & Upload Workflow
+  {
+    name: 'Admin Document Permissions & Upload Suite (12 Tests)',
+    script: 'npm run admin:documents:test',
+    phase: 'Phase 5: Productization & Release',
+  },
 ];
 
 async function runMasterRegression() {

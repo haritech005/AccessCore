@@ -19,7 +19,7 @@ export class DocumentParseError extends Error {
 export class UnsupportedFormatError extends DocumentParseError {
   constructor(filename: string, ext: string) {
     super(
-      `File '${filename}' has an unsupported extension '${ext}'. Supported formats: .pdf, .md, .json`,
+      `File '${filename}' has an unsupported extension '${ext}'. Supported formats: .pdf, .md, .markdown, .txt, .json`,
       'UNSUPPORTED_FORMAT',
       415
     );

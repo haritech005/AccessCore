@@ -4,7 +4,8 @@ import { authorizationService } from '../services/authorizationService';
 import { disclosurePolicyService } from '../services/disclosurePolicyService';
 import { DocumentMetadata, DocumentRecord } from '../types/document';
 import { AppError } from '../middleware/errorHandler';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireAdmin, verifyAdminCsrf } from '../middleware/auth';
+import { auditService } from '../services/auditService';
 import { SensitivityLevel } from '../types/identity';
 
 const router = Router();
@@ -23,6 +24,7 @@ function extractDocumentResource(doc: DocumentRecord | { metadata?: Record<strin
   allowed_groups: string[];
   sensitivity: SensitivityLevel;
   disclosure_policy: string;
+  is_active: boolean;
 } {
   const meta = (doc.metadata || {}) as Record<string, unknown>;
   return {
@@ -30,28 +32,23 @@ function extractDocumentResource(doc: DocumentRecord | { metadata?: Record<strin
     allowed_groups: (meta.allowed_groups as string[]) || (meta.authorized_groups as string[]) || [],
     sensitivity: (meta.sensitivity as SensitivityLevel) || 'internal',
     disclosure_policy: (meta.disclosure_policy as string) || 'internal_only',
+    is_active: meta.is_active !== false,
   };
 }
 
 /**
  * POST /api/documents/ingest
- * Ingests a new document or updates an existing document.
+ * Admin-only document ingestion route.
  * Accepts JSON payload with filename, content (plain text or base64), and optional override_metadata.
  */
 router.post(
   '/documents/ingest',
+  requireAdmin,
+  verifyAdminCsrf,
   async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     try {
       const user = req.user!;
       const { filename, content, override_metadata, is_base64 } = req.body;
-
-      const ingestAuthz = authorizationService.canIngest(
-        user,
-        override_metadata?.tenant_id as string | undefined
-      );
-      if (!ingestAuthz.allowed) {
-        throw new AppError(ingestAuthz.reason || 'Ingestion not permitted.', 403, 'FORBIDDEN');
-      }
 
       if (!filename || typeof filename !== 'string') {
         throw new AppError("Field 'filename' is required and must be a string.", 400, 'INVALID_INPUT');
@@ -76,6 +73,21 @@ router.post(
         filename,
         buffer,
         overrideMetadata: override_metadata as Partial<DocumentMetadata> | undefined,
+      });
+
+      await auditService.recordEvent({
+        actor: { id: user.id, email: user.email, role: user.role },
+        action: 'admin.document.uploaded',
+        targetType: 'document',
+        targetId: result.document_id,
+        outcome: 'success',
+        ipAddress: req.ip || req.socket.remoteAddress || null,
+        metadata: {
+          filename,
+          version: result.version,
+          chunks_count: result.chunks_count,
+          tenant_id: override_metadata?.tenant_id || 'default',
+        },
       });
 
       res.status(200).json({

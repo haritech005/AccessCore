@@ -41,6 +41,7 @@
     "test:conversations": "tsx src/services/testConversationService.ts",
     "admin:foundation:test": "tsx src/services/testAdminFoundation.ts",
     "admin:identity:test": "tsx src/services/testAdminIdentityManagement.ts",
+    "admin:documents:test": "tsx src/services/testAdminDocumentsWorkflow.ts",
     "test:regression": "tsx src/services/testMasterRegression.ts",
     "eval:baseline": "tsx src/evaluation/runBaselineEval.ts",
     "eval:hybrid": "tsx src/evaluation/runHybridEval.ts",

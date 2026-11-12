@@ -46,7 +46,7 @@ export const TenantIdEnum = z.enum([
 ]);
 export type TenantId = z.infer<typeof TenantIdEnum> | string;
 
-export const DocumentFormatEnum = z.enum(['pdf', 'markdown', 'json']);
+export const DocumentFormatEnum = z.enum(['pdf', 'markdown', 'json', 'text']);
 export type DocumentFormat = z.infer<typeof DocumentFormatEnum>;
 
 export const IngestionStatusEnum = z.enum([

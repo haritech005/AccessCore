@@ -518,12 +518,14 @@ export class AuthorizationService {
       const allowedGroups =
         (meta.allowed_groups as string[]) || (meta.authorized_groups as string[]) || [];
       const sensitivity = (meta.sensitivity as SensitivityLevel) || 'internal';
+      const isActive = meta.is_active !== false;
       return this.authorizeDocument(
         user,
         {
           tenant_id: tenantId,
           allowed_groups: allowedGroups,
           sensitivity,
+          is_active: isActive,
         },
         action
       ).allowed;

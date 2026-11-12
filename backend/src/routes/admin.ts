@@ -1,7 +1,9 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, requireAdmin, verifyAdminCsrf } from '../middleware/auth';
+import { AppError } from '../middleware/errorHandler';
 import { adminIdentityService } from '../services/adminIdentityService';
+import { adminDocumentService } from '../services/adminDocumentService';
 
 function extractAuditMeta(req: Request) {
   const correlationId =
@@ -450,6 +452,111 @@ router.patch('/tenants/:id', async (req: Request, res: Response, next: NextFunct
     next(err);
   }
 });
+
+/**
+ * GET /api/admin/documents
+ * Lists document governance metadata with search, filter, and pagination.
+ */
+router.get('/documents', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await adminDocumentService.listDocuments({
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      tenant: typeof req.query.tenant === 'string' ? req.query.tenant : undefined,
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      sensitivity: typeof req.query.sensitivity === 'string' ? req.query.sensitivity : undefined,
+      disclosure_policy:
+        typeof req.query.disclosure_policy === 'string' ? req.query.disclosure_policy : undefined,
+      document_type:
+        typeof req.query.document_type === 'string' ? req.query.document_type : undefined,
+      is_active: typeof req.query.is_active === 'string' ? req.query.is_active : undefined,
+      page: req.query.page ? Number(req.query.page) : 1,
+      limit: req.query.limit ? Number(req.query.limit) : 25,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/documents/upload
+ * Admin-only document upload with strict format, size, and ACL validation.
+ */
+router.post('/documents/upload', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await adminDocumentService.uploadDocument(
+      req.user!,
+      req.body || {},
+      extractAuditMeta(req)
+    );
+    res.status(201).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/documents/:id
+ * Returns full document governance metadata, versions, effective access preview, and audit history.
+ */
+router.get('/documents/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const detail = await adminDocumentService.getDocumentDetail(String(req.params.id));
+    res.status(200).json({ success: true, data: detail });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/admin/documents/:id/permissions
+ * Atomically updates document permissions, synced chunk metadata, and optional approved summary.
+ */
+router.patch(
+  '/documents/:id/permissions',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const detail = await adminDocumentService.updateDocumentPermissions(
+        req.user!,
+        String(req.params.id),
+        req.body || {},
+        extractAuditMeta(req)
+      );
+      res.status(200).json({ success: true, data: detail });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * POST /api/admin/documents/:id/archive
+ * Archives or restores a document and immediately toggles active retrieval chunk eligibility.
+ */
+router.post(
+  '/documents/:id/archive',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      if (typeof req.body?.is_active !== 'boolean') {
+        throw new AppError(
+          'Explicit boolean field "is_active" is required to archive or restore a document.',
+          400,
+          'INVALID_ARCHIVE_STATE'
+        );
+      }
+
+      const detail = await adminDocumentService.updateDocumentPermissions(
+        req.user!,
+        String(req.params.id),
+        { is_active: req.body.is_active },
+        extractAuditMeta(req)
+      );
+      res.status(200).json({ success: true, data: detail });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
 
 /**
  * Catch-all inside adminRouter: guarantees unauthorized callers to unknown /api/admin/* paths

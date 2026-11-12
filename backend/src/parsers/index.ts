@@ -13,11 +13,13 @@ import {
 import { parseJsonTicket, formatTicketToText } from './jsonTicket';
 import { parseMarkdown } from './markdown';
 import { parsePdf } from './pdf';
+import { parseText } from './text';
 
 export * from './base';
 export * from './markdown';
 export * from './jsonTicket';
 export * from './pdf';
+export * from './text';
 
 export interface ParseDocumentOptions {
   filename: string;
@@ -49,6 +51,8 @@ export async function parseDocument(
     case '.md':
     case '.markdown':
       return parseMarkdown(buffer, filename, overrideMetadata);
+    case '.txt':
+      return parseText(buffer, filename, overrideMetadata);
     case '.json':
       return parseJsonTicket(buffer, filename, overrideMetadata);
     case '.pdf':

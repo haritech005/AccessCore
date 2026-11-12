@@ -962,3 +962,195 @@ export function updateAdminTenant(
     token
   );
 }
+
+// =========================================================================
+// Admin Document Governance & Upload API (Subphase 5.5)
+// =========================================================================
+
+export interface AdminDocumentItem {
+  id: string;
+  document_id: string;
+  title: string;
+  filename: string;
+  format: string;
+  current_version: number;
+  status: string;
+  error_message: string | null;
+  tenant_id: string;
+  allowed_groups: string[];
+  sensitivity: 'public' | 'internal' | 'confidential' | 'restricted';
+  disclosure_policy: string;
+  document_type: string;
+  owner_team: string;
+  is_active: boolean;
+  active_chunks_count: number;
+  has_approved_summary: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminDocumentEffectiveUser {
+  user_id: string;
+  name: string;
+  email: string;
+  role: string;
+  user_type: string;
+  status: string;
+  allowed: boolean;
+  reason?: string;
+}
+
+export interface AdminDocumentVersionEntry {
+  id: string;
+  version: number;
+  content_hash: string;
+  status: string;
+  error_message: string | null;
+  created_at: string;
+  published_at: string | null;
+}
+
+export interface AdminDocumentIngestionJobEntry {
+  id: string;
+  version_id: string | null;
+  status: string;
+  error_message: string | null;
+  started_at: string;
+  completed_at: string | null;
+}
+
+export interface AdminDocumentAuditEntry {
+  id: string;
+  created_at: string;
+  actor_id: string | null;
+  actor_email: string | null;
+  actor_role: string | null;
+  action: string;
+  outcome: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface AdminDocumentDetail {
+  document: AdminDocumentItem;
+  approved_summary: {
+    summary_text: string;
+    status: string;
+    approved_at: string;
+    approved_by: string | null;
+  } | null;
+  versions: AdminDocumentVersionEntry[];
+  ingestion_jobs: AdminDocumentIngestionJobEntry[];
+  effective_access: {
+    permitted_count: number;
+    denied_count: number;
+    users: AdminDocumentEffectiveUser[];
+  };
+  audit_history: AdminDocumentAuditEntry[];
+}
+
+export interface AdminDocumentListFilters {
+  search?: string;
+  tenant?: string;
+  status?: string;
+  sensitivity?: string;
+  disclosure_policy?: string;
+  document_type?: string;
+  is_active?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface AdminDocumentUploadPayload {
+  filename: string;
+  content: string;
+  is_base64?: boolean;
+  approved_summary?: string;
+  override_metadata?: {
+    document_id?: string;
+    title?: string;
+    document_type?: string;
+    tenant_id?: string;
+    owner_team?: string;
+    allowed_groups?: string[];
+    sensitivity?: string;
+    disclosure_policy?: string;
+    version?: string;
+  };
+}
+
+export interface AdminDocumentPermissionsPatch {
+  title?: string;
+  tenant_id?: string;
+  allowed_groups?: string[];
+  sensitivity?: string;
+  disclosure_policy?: string;
+  document_type?: string;
+  owner_team?: string;
+  is_active?: boolean;
+  approved_summary?: string;
+}
+
+export function fetchAdminDocuments(filters: AdminDocumentListFilters = {}, token?: string) {
+  const params = new URLSearchParams();
+  if (filters.search) params.set('search', filters.search);
+  if (filters.tenant) params.set('tenant', filters.tenant);
+  if (filters.status) params.set('status', filters.status);
+  if (filters.sensitivity) params.set('sensitivity', filters.sensitivity);
+  if (filters.disclosure_policy) params.set('disclosure_policy', filters.disclosure_policy);
+  if (filters.document_type) params.set('document_type', filters.document_type);
+  if (filters.is_active) params.set('is_active', filters.is_active);
+  if (filters.page) params.set('page', String(filters.page));
+  if (filters.limit) params.set('limit', String(filters.limit));
+
+  const qs = params.toString();
+  return adminFetch<{
+    documents: AdminDocumentItem[];
+    total: number;
+    page: number;
+    limit: number;
+  }>(`/api/admin/documents${qs ? `?${qs}` : ''}`, { method: 'GET' }, token);
+}
+
+export function fetchAdminDocumentDetail(idOrCode: string, token?: string) {
+  return adminFetch<AdminDocumentDetail>(
+    `/api/admin/documents/${encodeURIComponent(idOrCode)}`,
+    { method: 'GET' },
+    token
+  );
+}
+
+export function uploadAdminDocument(payload: AdminDocumentUploadPayload, token?: string) {
+  return adminFetch<{
+    ingestion: {
+      job_id: string;
+      document_id: string;
+      doc_uuid: string;
+      version: number;
+      status: string;
+      chunks_count: number;
+      embeddings_reused_count: number;
+      message: string;
+    };
+    detail: AdminDocumentDetail;
+  }>('/api/admin/documents/upload', { method: 'POST', body: payload }, token);
+}
+
+export function updateAdminDocumentPermissions(
+  idOrCode: string,
+  payload: AdminDocumentPermissionsPatch,
+  token?: string
+) {
+  return adminFetch<AdminDocumentDetail>(
+    `/api/admin/documents/${encodeURIComponent(idOrCode)}/permissions`,
+    { method: 'PATCH', body: payload },
+    token
+  );
+}
+
+export function toggleAdminDocumentArchive(idOrCode: string, isActive: boolean, token?: string) {
+  return adminFetch<AdminDocumentDetail>(
+    `/api/admin/documents/${encodeURIComponent(idOrCode)}/archive`,
+    { method: 'POST', body: { is_active: isActive } },
+    token
+  );
+}
