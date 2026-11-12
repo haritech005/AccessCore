@@ -10,6 +10,12 @@ export interface AuthUserProfile {
   has_wildcard_tenant: boolean;
 }
 
+export function isAdminUser(user: AuthUserProfile | null | undefined): boolean {
+  if (!user || user.status !== 'active') return false;
+  if (user.user_type !== 'employee') return false;
+  return user.role === 'admin' || user.role === 'it_security_admin';
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
 const TOKEN_KEY = 'accesscore_session_token';
 

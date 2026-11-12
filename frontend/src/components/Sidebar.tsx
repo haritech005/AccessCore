@@ -1,8 +1,9 @@
 'use client';
 
 import React from 'react';
+import Link from 'next/link';
 import { ConversationItem } from '@/lib/api';
-import { AuthUserProfile } from '@/lib/auth';
+import { AuthUserProfile, isAdminUser } from '@/lib/auth';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -193,7 +194,7 @@ export function Sidebar({
         </div>
 
         {/* Quick Nav / Library */}
-        <div style={{ padding: '0 14px 10px' }}>
+        <div style={{ padding: '0 14px 10px', display: 'flex', flexDirection: 'column', gap: '6px' }}>
           <button
             onClick={onOpenLibrary}
             style={{
@@ -236,6 +237,57 @@ export function Sidebar({
               </span>
             )}
           </button>
+
+          {isAdminUser(currentUser) && (
+            <Link
+              href="/admin"
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: '100%',
+                padding: '8px 12px',
+                borderRadius: '7px',
+                backgroundColor: 'rgba(99, 102, 241, 0.08)',
+                border: '1px solid rgba(99, 102, 241, 0.22)',
+                color: '#c7d2fe',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                textDecoration: 'none',
+                transition: 'background 0.15s ease, border-color 0.15s ease',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.16)';
+                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.42)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.backgroundColor = 'rgba(99, 102, 241, 0.08)';
+                e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.22)';
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                  <path d="m9 12 2 2 4-4" />
+                </svg>
+                <span>Admin Console</span>
+              </div>
+              <span
+                style={{
+                  fontSize: '0.65rem',
+                  fontWeight: 700,
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.04em',
+                  color: '#a5b4fc',
+                  backgroundColor: 'rgba(99, 102, 241, 0.18)',
+                  padding: '1px 6px',
+                  borderRadius: '999px',
+                }}
+              >
+                Admin
+              </span>
+            </Link>
+          )}
         </div>
 
         {/* Recents Section */}

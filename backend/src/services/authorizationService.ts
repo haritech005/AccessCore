@@ -327,6 +327,45 @@ export class AuthorizationService {
   }
 
   /**
+   * Helper: Determines if user is an active enterprise administrator.
+   * Requires active status, employee user_type, and 'admin' or 'it_security_admin' role.
+   */
+  isAdmin(user: AuthenticatedUser | null | undefined): boolean {
+    if (!user || user.status !== 'active') return false;
+    if (user.user_type !== 'employee') return false;
+    return user.role === 'admin' || user.role === 'it_security_admin';
+  }
+
+  /**
+   * Authorizes access to administrative endpoints and operations.
+   * Enforces default-deny across unauthenticated, inactive, customer, and non-admin employees.
+   */
+  authorizeAdminAccess(user: AuthenticatedUser | null | undefined): PermissionCheckResult {
+    if (!user) {
+      return {
+        allowed: false,
+        reason: 'Default deny: Authentication required for administrative access.',
+      };
+    }
+
+    if (user.status !== 'active') {
+      return {
+        allowed: false,
+        reason: `User account is ${user.status}. Administrative access denied.`,
+      };
+    }
+
+    if (user.user_type !== 'employee' || (user.role !== 'admin' && user.role !== 'it_security_admin')) {
+      return {
+        allowed: false,
+        reason: `Administrator privileges required. Role '${user.role}' is not authorized.`,
+      };
+    }
+
+    return { allowed: true };
+  }
+
+  /**
    * Evaluation for tenant resources.
    */
   private evaluateTenantResource(
@@ -339,13 +378,7 @@ export class AuthorizationService {
     }
 
     if (action === 'manage:tenant' || action === 'admin:manage') {
-      if (user.role === 'it_security_admin' || user.role === 'admin') {
-        return { allowed: true };
-      }
-      return {
-        allowed: false,
-        reason: 'Tenant administration requires it_security_admin role',
-      };
+      return this.authorizeAdminAccess(user);
     }
 
     return { allowed: false, reason: `Default deny: Action '${action}' on tenant denied` };

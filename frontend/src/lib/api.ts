@@ -530,3 +530,152 @@ export async function deleteConversation(id: string, token?: string): Promise<{
     };
   }
 }
+
+// ============================================================================
+// Admin Dashboard APIs (Subphase 5.3+)
+// ============================================================================
+
+export interface AdminAccessCheckData {
+  authorized: boolean;
+  admin: {
+    id: string;
+    email: string;
+    name: string;
+    role: string;
+    user_type: string;
+    groups: string[];
+  };
+  capabilities: {
+    can_manage_users: boolean;
+    can_manage_roles: boolean;
+    can_manage_documents: boolean;
+    can_ingest: boolean;
+    can_view_audit_logs: boolean;
+  };
+}
+
+export interface AdminOverviewData {
+  admin: {
+    id: string;
+    name: string;
+    email: string;
+    role: string;
+  };
+  metrics: {
+    users: {
+      total: number;
+      active: number;
+      disabled: number;
+      admins: number;
+      customers: number;
+    };
+    groups: number;
+    tenants: number;
+    documents: {
+      total: number;
+      completed: number;
+      pending_or_processing: number;
+      failed: number;
+      active_chunks: number;
+    };
+    ingestion_jobs: {
+      total: number;
+      completed: number;
+      failed: number;
+      in_progress: number;
+    };
+    conversations: number;
+  };
+  recent_ingestion_jobs: {
+    id: string;
+    document_code: string;
+    title: string;
+    status: string;
+    error_message: string | null;
+    started_at: string;
+    completed_at: string | null;
+  }[];
+  security_posture: {
+    server_guard: string;
+    csrf_protection: string;
+    tenant_isolation: string;
+  };
+}
+
+/**
+ * Verifies administrator authorization against the backend API.
+ */
+export async function checkAdminAccess(token?: string): Promise<{
+  data: AdminAccessCheckData | null;
+  status: number;
+  error: string | null;
+}> {
+  try {
+    const authHeaders = getAuthHeaders(token);
+    const res = await fetch(`${API_BASE_URL}/api/admin/access-check`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    const json: ApiResponse<AdminAccessCheckData> = await res.json();
+    if (!res.ok || !json.success) {
+      return {
+        data: null,
+        status: res.status,
+        error: json.error?.message || `Access denied (${res.status}).`,
+      };
+    }
+
+    return { data: json.data || null, status: res.status, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      status: 0,
+      error: err instanceof Error ? err.message : 'Unable to reach admin verification endpoint.',
+    };
+  }
+}
+
+/**
+ * Fetches live administrative system statistics for the Admin Overview view.
+ */
+export async function fetchAdminOverview(token?: string): Promise<{
+  data: AdminOverviewData | null;
+  status: number;
+  error: string | null;
+}> {
+  try {
+    const authHeaders = getAuthHeaders(token);
+    const res = await fetch(`${API_BASE_URL}/api/admin/overview`, {
+      method: 'GET',
+      headers: {
+        Accept: 'application/json',
+        ...authHeaders,
+      },
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    const json: ApiResponse<AdminOverviewData> = await res.json();
+    if (!res.ok || !json.success) {
+      return {
+        data: null,
+        status: res.status,
+        error: json.error?.message || `Failed to load admin overview (${res.status}).`,
+      };
+    }
+
+    return { data: json.data || null, status: res.status, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      status: 0,
+      error: err instanceof Error ? err.message : 'Unable to reach admin overview endpoint.',
+    };
+  }
+}

@@ -65,6 +65,12 @@ const REGRESSION_SUITES = [
     script: 'npm run test:conversations',
     phase: 'Phase 5: Productization & Release',
   },
+  // Subphase 5.3: Admin Foundation & Access Enforcement
+  {
+    name: 'Admin Foundation & Access Enforcement Suite (19 Tests)',
+    script: 'npm run admin:foundation:test',
+    phase: 'Phase 5: Productization & Release',
+  },
 ];
 
 async function runMasterRegression() {
@@ -87,7 +93,7 @@ async function runMasterRegression() {
         cwd: backendDir,
         encoding: 'utf8',
         stdio: 'pipe',
-        timeout: 240000,
+        timeout: 420000,
       });
 
       const durationMs = Date.now() - startSuite;
