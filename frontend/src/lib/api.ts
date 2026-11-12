@@ -679,3 +679,286 @@ export async function fetchAdminOverview(token?: string): Promise<{
     };
   }
 }
+
+// ============================================================================
+// Admin Identity, Role, Group, and Tenant APIs (Subphase 5.4)
+// ============================================================================
+
+export interface AdminUserItem {
+  id: string;
+  email: string;
+  name: string;
+  role: string;
+  user_type: 'employee' | 'customer_user';
+  status: 'active' | 'inactive' | 'suspended';
+  groups: string[];
+  tenant_scope: string[];
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AdminEffectiveAccess {
+  user_id: string;
+  is_active: boolean;
+  is_admin: boolean;
+  has_restricted_clearance: boolean;
+  has_wildcard_tenant: boolean;
+  effective_groups: string[];
+  effective_tenants: { id: string; name: string; status: string }[];
+  accessible_documents: {
+    id: string;
+    document_id: string;
+    title: string;
+    tenant_id: string;
+    sensitivity: string;
+    disclosure_policy: string;
+    allowed_groups: string[];
+  }[];
+  denied_summary: {
+    total_denied: number;
+    by_reason: Record<string, number>;
+  };
+}
+
+export interface AdminRoleDefinition {
+  role: string;
+  label: string;
+  user_type: 'employee' | 'customer_user';
+  is_admin: boolean;
+  description: string;
+  capabilities: string[];
+  recommended_groups: string[];
+  boundary_note: string;
+  user_count: number;
+  active_user_count: number;
+}
+
+export interface AdminGroupMember {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  user_type: string;
+  status: string;
+}
+
+export interface AdminGroupItem {
+  id: string;
+  name: string;
+  description: string | null;
+  created_at: string;
+  member_count: number;
+  members: AdminGroupMember[];
+}
+
+export interface AdminTenantItem {
+  id: string;
+  name: string;
+  status: 'active' | 'suspended' | 'archived';
+  created_at: string;
+  user_count: number;
+  document_count: number;
+}
+
+export interface AdminApiResult<T> {
+  data: T | null;
+  status: number;
+  code?: string;
+  error: string | null;
+}
+
+async function adminFetch<T>(
+  path: string,
+  options: { method?: string; body?: unknown } = {},
+  token?: string
+): Promise<AdminApiResult<T>> {
+  try {
+    const authHeaders = getAuthHeaders(token);
+    const headers: Record<string, string> = {
+      Accept: 'application/json',
+      ...authHeaders,
+    };
+    if (options.body !== undefined) {
+      headers['Content-Type'] = 'application/json';
+    }
+
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      method: options.method || 'GET',
+      headers,
+      body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
+      credentials: 'include',
+      cache: 'no-store',
+    });
+
+    const json: ApiResponse<T> = await res.json();
+    if (!res.ok || !json.success) {
+      return {
+        data: null,
+        status: res.status,
+        code: json.error?.code,
+        error: json.error?.message || `Administrative request failed (${res.status}).`,
+      };
+    }
+
+    return { data: json.data ?? null, status: res.status, error: null };
+  } catch (err) {
+    return {
+      data: null,
+      status: 0,
+      error: err instanceof Error ? err.message : 'Unable to reach administrative API.',
+    };
+  }
+}
+
+export function fetchAdminUsers(
+  filters: {
+    search?: string;
+    role?: string;
+    status?: string;
+    user_type?: string;
+    group?: string;
+    tenant?: string;
+    page?: number;
+    limit?: number;
+  } = {},
+  token?: string
+) {
+  const params = new URLSearchParams();
+  if (filters.search) params.set('search', filters.search);
+  if (filters.role && filters.role !== 'all') params.set('role', filters.role);
+  if (filters.status && filters.status !== 'all') params.set('status', filters.status);
+  if (filters.user_type && filters.user_type !== 'all') params.set('user_type', filters.user_type);
+  if (filters.group && filters.group !== 'all') params.set('group', filters.group);
+  if (filters.tenant && filters.tenant !== 'all') params.set('tenant', filters.tenant);
+  if (filters.page) params.set('page', String(filters.page));
+  if (filters.limit) params.set('limit', String(filters.limit));
+  const qs = params.toString();
+  return adminFetch<{ users: AdminUserItem[]; total: number; page: number; limit: number }>(
+    `/api/admin/users${qs ? `?${qs}` : ''}`,
+    { method: 'GET' },
+    token
+  );
+}
+
+export function fetchAdminUserDetail(userId: string, token?: string) {
+  return adminFetch<{ user: AdminUserItem; effective_access: AdminEffectiveAccess }>(
+    `/api/admin/users/${encodeURIComponent(userId)}`,
+    { method: 'GET' },
+    token
+  );
+}
+
+export function createAdminUser(
+  payload: {
+    id?: string;
+    email: string;
+    name: string;
+    role: string;
+    user_type: 'employee' | 'customer_user';
+    status: 'active' | 'inactive' | 'suspended';
+    password: string;
+    groups: string[];
+    tenant_scope: string[];
+  },
+  token?: string
+) {
+  return adminFetch<{ user: AdminUserItem }>(
+    '/api/admin/users',
+    { method: 'POST', body: payload },
+    token
+  );
+}
+
+export function updateAdminUser(
+  userId: string,
+  payload: Partial<{
+    email: string;
+    name: string;
+    role: string;
+    user_type: 'employee' | 'customer_user';
+    status: 'active' | 'inactive' | 'suspended';
+    groups: string[];
+    tenant_scope: string[];
+  }>,
+  token?: string
+) {
+  return adminFetch<{ user: AdminUserItem; effective_access: AdminEffectiveAccess }>(
+    `/api/admin/users/${encodeURIComponent(userId)}`,
+    { method: 'PATCH', body: payload },
+    token
+  );
+}
+
+export function resetAdminUserPassword(userId: string, password: string, token?: string) {
+  return adminFetch<{ message: string }>(
+    `/api/admin/users/${encodeURIComponent(userId)}/reset-password`,
+    { method: 'POST', body: { password } },
+    token
+  );
+}
+
+export function fetchAdminRoles(token?: string) {
+  return adminFetch<{ roles: AdminRoleDefinition[] }>('/api/admin/roles', { method: 'GET' }, token);
+}
+
+export function fetchAdminGroups(token?: string) {
+  return adminFetch<{ groups: AdminGroupItem[] }>('/api/admin/groups', { method: 'GET' }, token);
+}
+
+export function createAdminGroup(
+  payload: { id: string; name: string; description?: string },
+  token?: string
+) {
+  return adminFetch<{ group: AdminGroupItem }>(
+    '/api/admin/groups',
+    { method: 'POST', body: payload },
+    token
+  );
+}
+
+export function updateAdminGroup(
+  groupId: string,
+  payload: { name?: string; description?: string },
+  token?: string
+) {
+  return adminFetch<{ group: AdminGroupItem }>(
+    `/api/admin/groups/${encodeURIComponent(groupId)}`,
+    { method: 'PATCH', body: payload },
+    token
+  );
+}
+
+export function updateAdminGroupMembers(groupId: string, userIds: string[], token?: string) {
+  return adminFetch<{ group: AdminGroupItem }>(
+    `/api/admin/groups/${encodeURIComponent(groupId)}/members`,
+    { method: 'PUT', body: { user_ids: userIds } },
+    token
+  );
+}
+
+export function fetchAdminTenants(token?: string) {
+  return adminFetch<{ tenants: AdminTenantItem[] }>('/api/admin/tenants', { method: 'GET' }, token);
+}
+
+export function createAdminTenant(
+  payload: { id: string; name: string; status?: 'active' | 'suspended' | 'archived' },
+  token?: string
+) {
+  return adminFetch<{ tenant: AdminTenantItem }>(
+    '/api/admin/tenants',
+    { method: 'POST', body: payload },
+    token
+  );
+}
+
+export function updateAdminTenant(
+  tenantId: string,
+  payload: { name?: string; status?: 'active' | 'suspended' | 'archived' },
+  token?: string
+) {
+  return adminFetch<{ tenant: AdminTenantItem }>(
+    `/api/admin/tenants/${encodeURIComponent(tenantId)}`,
+    { method: 'PATCH', body: payload },
+    token
+  );
+}

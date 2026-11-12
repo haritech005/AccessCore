@@ -71,6 +71,12 @@ const REGRESSION_SUITES = [
     script: 'npm run admin:foundation:test',
     phase: 'Phase 5: Productization & Release',
   },
+  // Subphase 5.4: Admin Identity, Role, Group & Tenant Management
+  {
+    name: 'Admin Identity, Role & Group Management Suite (13 Tests)',
+    script: 'npm run admin:identity:test',
+    phase: 'Phase 5: Productization & Release',
+  },
 ];
 
 async function runMasterRegression() {

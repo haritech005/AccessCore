@@ -1,6 +1,16 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { query } from '../db';
 import { requireAuth, requireAdmin, verifyAdminCsrf } from '../middleware/auth';
+import { adminIdentityService } from '../services/adminIdentityService';
+
+function extractAuditMeta(req: Request) {
+  const correlationId =
+    (typeof req.headers['x-request-id'] === 'string' && req.headers['x-request-id']) ||
+    (typeof req.headers['x-correlation-id'] === 'string' && req.headers['x-correlation-id']) ||
+    null;
+  const ipAddress = req.ip || req.socket.remoteAddress || null;
+  return { correlationId, ipAddress };
+}
 
 const router = Router();
 
@@ -180,6 +190,266 @@ router.get(
     }
   }
 );
+
+/**
+ * =========================================================================
+ * Subphase 5.4 — User, Role, Group, and Tenant Management Routes
+ * =========================================================================
+ */
+
+/**
+ * GET /api/admin/users
+ * Paginated, filterable user directory (never returns password hashes).
+ */
+router.get('/users', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const result = await adminIdentityService.listUsers({
+      search: typeof req.query.search === 'string' ? req.query.search : undefined,
+      role: typeof req.query.role === 'string' ? req.query.role : undefined,
+      status: typeof req.query.status === 'string' ? req.query.status : undefined,
+      user_type: typeof req.query.user_type === 'string' ? req.query.user_type : undefined,
+      group: typeof req.query.group === 'string' ? req.query.group : undefined,
+      tenant: typeof req.query.tenant === 'string' ? req.query.tenant : undefined,
+      page: typeof req.query.page === 'string' ? parseInt(req.query.page, 10) : 1,
+      limit: typeof req.query.limit === 'string' ? parseInt(req.query.limit, 10) : 25,
+    });
+    res.status(200).json({ success: true, data: result });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/users
+ * Create a new user account with validated role, group, and tenant boundaries.
+ */
+router.post('/users', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const created = await adminIdentityService.createUser(
+      req.user!,
+      req.body || {},
+      extractAuditMeta(req)
+    );
+    res.status(201).json({ success: true, data: { user: created } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/users/:id
+ * Fetch user profile + server-computed effective access inspection.
+ */
+router.get('/users/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = String(req.params.id);
+    const [user, effectiveAccess] = await Promise.all([
+      adminIdentityService.getUserById(userId),
+      adminIdentityService.getUserEffectiveAccess(userId),
+    ]);
+    res.status(200).json({
+      success: true,
+      data: { user, effective_access: effectiveAccess },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/users/:id/effective-access
+ * Dedicated endpoint to inspect effective tenants, clearances, and accessible documents.
+ */
+router.get(
+  '/users/:id/effective-access',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const effectiveAccess = await adminIdentityService.getUserEffectiveAccess(
+        String(req.params.id)
+      );
+      res.status(200).json({ success: true, data: { effective_access: effectiveAccess } });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * PATCH /api/admin/users/:id
+ * Update user profile, role, status, groups, or tenant scope with lockout & escalation guards.
+ */
+router.patch('/users/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const userId = String(req.params.id);
+    const updated = await adminIdentityService.updateUser(
+      req.user!,
+      userId,
+      req.body || {},
+      extractAuditMeta(req)
+    );
+    const effectiveAccess = await adminIdentityService.getUserEffectiveAccess(userId);
+    res.status(200).json({
+      success: true,
+      data: { user: updated, effective_access: effectiveAccess },
+    });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/users/:id/reset-password
+ * Securely resets a user's password hash without returning or logging secrets.
+ */
+router.post(
+  '/users/:id/reset-password',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      await adminIdentityService.resetUserPassword(
+        req.user!,
+        String(req.params.id),
+        req.body?.password,
+        extractAuditMeta(req)
+      );
+      res.status(200).json({
+        success: true,
+        data: { message: 'User password reset successfully.' },
+      });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/roles
+ * Lists available roles, associated permissions, boundary notes, and user counts.
+ */
+router.get('/roles', async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const roles = await adminIdentityService.listRoles();
+    res.status(200).json({ success: true, data: { roles } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * GET /api/admin/groups
+ * Lists all security groups with member counts and member summaries.
+ */
+router.get('/groups', async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const groups = await adminIdentityService.listGroups();
+    res.status(200).json({ success: true, data: { groups } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/groups
+ * Creates a new security group.
+ */
+router.post('/groups', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const group = await adminIdentityService.createGroup(
+      req.user!,
+      req.body || {},
+      extractAuditMeta(req)
+    );
+    res.status(201).json({ success: true, data: { group } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/admin/groups/:id
+ * Updates a group's name or description.
+ */
+router.patch('/groups/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const group = await adminIdentityService.updateGroup(
+      req.user!,
+      String(req.params.id),
+      req.body || {},
+      extractAuditMeta(req)
+    );
+    res.status(200).json({ success: true, data: { group } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PUT /api/admin/groups/:id/members
+ * Atomically replaces member list for a group while enforcing privilege escalation checks.
+ */
+router.put(
+  '/groups/:id/members',
+  async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+    try {
+      const group = await adminIdentityService.setGroupMembers(
+        req.user!,
+        String(req.params.id),
+        req.body?.user_ids,
+        extractAuditMeta(req)
+      );
+      res.status(200).json({ success: true, data: { group } });
+    } catch (err) {
+      next(err);
+    }
+  }
+);
+
+/**
+ * GET /api/admin/tenants
+ * Lists configured tenants along with assigned user and document counts.
+ */
+router.get('/tenants', async (_req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenants = await adminIdentityService.listTenants();
+    res.status(200).json({ success: true, data: { tenants } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * POST /api/admin/tenants
+ * Creates a new customer tenant boundary.
+ */
+router.post('/tenants', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenant = await adminIdentityService.createTenant(
+      req.user!,
+      req.body || {},
+      extractAuditMeta(req)
+    );
+    res.status(201).json({ success: true, data: { tenant } });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * PATCH /api/admin/tenants/:id
+ * Updates a tenant's display name or lifecycle status.
+ */
+router.patch('/tenants/:id', async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  try {
+    const tenant = await adminIdentityService.updateTenant(
+      req.user!,
+      String(req.params.id),
+      req.body || {},
+      extractAuditMeta(req)
+    );
+    res.status(200).json({ success: true, data: { tenant } });
+  } catch (err) {
+    next(err);
+  }
+});
 
 /**
  * Catch-all inside adminRouter: guarantees unauthorized callers to unknown /api/admin/* paths
