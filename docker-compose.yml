@@ -1,0 +1,122 @@
+services:
+  # ============================================================================
+  # 1. PostgreSQL Database with pgvector Extension
+  # ============================================================================
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: accesscore-postgres
+    restart: unless-stopped
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-accesscore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-accesscore_password}
+      POSTGRES_DB: ${POSTGRES_DB:-accesscore}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-accesscore} -d ${POSTGRES_DB:-accesscore}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - accesscore-network
+
+  # ============================================================================
+  # 2. AccessCore Backend API Service (Express, pgvector, LangChain)
+  # ============================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: accesscore-backend
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "${BACKEND_PORT:-4000}:4000"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-accesscore}:${POSTGRES_PASSWORD:-accesscore_password}@postgres:5432/${POSTGRES_DB:-accesscore}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:3b}
+      OLLAMA_EMBEDDING_MODEL: ${OLLAMA_EMBEDDING_MODEL:-nomic-embed-text}
+      PORT: 4000
+      NODE_ENV: production
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      AUTH_SECRET: ${AUTH_SECRET:-accesscore_production_secret_32chars_min_replace}
+      DEV_USER_PASSWORD: ${DEV_USER_PASSWORD:-CloudDesk2026!}
+      AUTO_SEED: ${AUTO_SEED:-true}
+      ALLOW_PROD_SEED: ${ALLOW_PROD_SEED:-true}
+    extra_hosts:
+      # Allows backend container to connect to host Ollama instance across Windows, Mac, and Linux
+      - "host.docker.internal:host-gateway"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:4000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    networks:
+      - accesscore-network
+
+  # ============================================================================
+  # 3. AccessCore Frontend Web Application (Next.js 16)
+  # ============================================================================
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+    container_name: accesscore-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:4000}
+      AUTH_SECRET: ${AUTH_SECRET:-accesscore_production_secret_32chars_min_replace}
+      PORT: 3000
+      NODE_ENV: production
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:3000 || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    networks:
+      - accesscore-network
+
+  # ============================================================================
+  # 4. Optional: Containerized Ollama AI Engine (profile: with-ollama)
+  # Run with: docker compose --profile with-ollama up
+  # (Recommended: run Ollama directly on host for native GPU acceleration)
+  # ============================================================================
+  ollama:
+    profiles: ["with-ollama"]
+    image: ollama/ollama:latest
+    container_name: accesscore-ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - accesscore-network
+
+volumes:
+  postgres_data:
+    name: accesscore_postgres_data
+    driver: local
+  ollama_data:
+    name: accesscore_ollama_data
+    driver: local
+
+networks:
+  accesscore-network:
+    name: accesscore_network
+    driver: bridge
+
