@@ -47,6 +47,7 @@
     "admin:documents:test": "tsx src/services/testAdminDocumentsWorkflow.ts",
     "admin:ingestion:test": "tsx src/services/testAdminIngestionRecovery.ts",
     "admin:logging:test": "tsx src/services/testStructuredLoggingAndAudit.ts",
+    "demo:portfolio": "tsx src/services/testPortfolioDemo.ts",
     "test:regression": "tsx src/services/testMasterRegression.ts",
     "eval:baseline": "tsx src/evaluation/runBaselineEval.ts",
     "eval:hybrid": "tsx src/evaluation/runHybridEval.ts",

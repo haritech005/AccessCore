@@ -1,134 +1,124 @@
 # AccessCore — Permission-Aware Enterprise Knowledge System
 
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue.svg)](https://www.typescriptlang.org/)
+[![Next.js](https://img.shields.io/badge/Next.js-16.4-black.svg)](https://nextjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16%2B-blue.svg)](https://www.postgresql.org/)
+[![pgvector](https://img.shields.io/badge/pgvector-0.8%2B-green.svg)](https://github.com/pgvector/pgvector)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED.svg)](https://www.docker.com/)
+[![License: ISC](https://img.shields.io/badge/License-ISC-blue.svg)](https://opensource.org/licenses/ISC)
+
 AccessCore is a production-grade, permission-aware multi-tenant enterprise Retrieval-Augmented Generation (RAG) platform. It ingests internal documentation, product runbooks, and sensitive customer support tickets, transforming them into grounded, citation-backed answers with strict tenant isolation, audience disclosure policies, and administrative governance.
 
 ---
 
-## 🚀 Quickstart with Docker (Recommended)
+## Architecture Overview
 
-Running AccessCore with **Docker Compose** is the fastest and most reproducible way to run the entire stack. Everything runs in isolated containers with zero manual database or dependency configuration.
-
-### Prerequisites
-1. **Docker Desktop** installed and running on your system ([Download Docker](https://www.docker.com/products/docker-desktop/)).
-2. **Ollama** installed on your host machine ([Download Ollama](https://ollama.com/)):
-   ```bash
-   # Pull the required models on your host:
-   ollama pull nomic-embed-text
-   ollama pull qwen2.5:3b
-   ```
-
-### 3-Step Launch
-```bash
-# 1. Clone repository and create local environment file
-cp .env.example .env
-
-# 2. Build and launch all containers in background
-docker compose up -d --build
-
-# 3. Check service health
-docker compose ps
-```
-
-Once running:
-- **Web Application (UI):** [http://localhost:3000](http://localhost:3000)
-- **Backend API Server:** [http://localhost:4000](http://localhost:4000)
-- **Startup Diagnostics & Health:** [http://localhost:4000/health](http://localhost:4000/health)
-
-*(Note: On first startup, the backend automatically runs all database migrations and seeds initial synthetic data when `AUTO_SEED=true` is set in `.env`.)*
-
----
-
-## 🐳 Understanding Docker for Beginners
-
-If you are new to Docker, here is a simple breakdown of what is happening under the hood:
-
-### 1. What is a Container?
-Think of a **container** as a lightweight, isolated software box. It packages your code, runtime (Node.js, PostgreSQL), libraries, and settings together so the application runs **identically** on any machine (Windows, Mac, Linux, or Cloud), eliminating *"it works on my machine"* bugs.
-
-### 2. The 3 Containers in AccessCore
-When you run `docker compose up`, Docker spins up three interconnected services:
+AccessCore is architected as an isolated, local-first enterprise platform with zero external cloud dependencies or paid APIs:
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                    Docker Bridge Network (accesscore_network)           │
-│                                                                         │
-│  ┌───────────────────────┐   HTTP   ┌────────────────────────────────┐  │
-│  │  accesscore-frontend  │ ───────> │      accesscore-backend        │  │
-│  │   (Next.js 16 UI)     │          │    (Express API Service)       │  │
-│  │     Port 3000         │          │          Port 4000             │  │
-│  └───────────────────────┘          └───────────────┬────────────────┘  │
-│                                                     │                   │
-│                                            Postgres │                   │
-│                                            Protocol │                   │
-│                                                     ▼                   │
-│                                     ┌────────────────────────────────┐  │
-│                                     │      accesscore-postgres       │  │
-│                                     │     (PostgreSQL + pgvector)    │  │
-│                                     │          Port 5432             │  │
-│                                     └───────────────┬────────────────┘  │
-└─────────────────────────────────────────────────────┼───────────────────┘
+┌────────────────────────────────────────────────────────────────────────┐
+│                   Docker Bridge Network (accesscore_network)           │
+│                                                                        │
+│  ┌───────────────────────┐   HTTP   ┌───────────────────────────────┐  │
+│  │  accesscore-frontend  │ ───────> │      accesscore-backend       │  │
+│  │   (Next.js 16 UI)     │          │    (Express API Service)      │  │
+│  │      Port 3000        │          │          Port 4000            │  │
+│  └───────────────────────┘          └───────────────┬───────────────┘  │
+│                                                     │                  │
+│                                            Postgres │                  │
+│                                            Protocol │                  │
+│                                                     ▼                  │
+│                                     ┌───────────────────────────────┐  │
+│                                     │      accesscore-postgres      │  │
+│                                     │     (PostgreSQL + pgvector)   │  │
+│                                     │          Port 5432            │  │
+│                                     └───────────────┬───────────────┘  │
+└─────────────────────────────────────────────────────┼──────────────────┘
                                                       │
                        Host Ollama Engine             ▼
                  (http://host.docker.internal:11434)  Named Docker Volume
                  - nomic-embed-text (768-dim)         (accesscore_postgres_data)
-                 - qwen2.5:3b (LLM)                   *Persists data on disk*
+                 - qwen2.5:3b (LLM)                   *Data persists safely*
 ```
 
-- **`accesscore-postgres` (Database):** Runs PostgreSQL 16 bundled with the `pgvector` extension. All vector embeddings, identity accounts, documents, and audit logs are safely stored in a Docker **named volume** (`accesscore_postgres_data`), so your data survives container restarts.
-- **`accesscore-backend` (API Engine):** Builds and runs the Express TypeScript server. On boot, it automatically applies schema migrations (`001` through `007`), validates Ollama connectivity, and serves API endpoints on port `4000`.
-- **`accesscore-frontend` (Web App):** Builds an optimized production Next.js 16 container running on port `3000`.
-- **Connecting to Ollama (`host.docker.internal`):** By default, Docker containers connect to Ollama running directly on your host machine. This gives you **native GPU acceleration** without complicated Docker GPU pass-through drivers.
+### Core Technology Stack
 
----
-
-## 🛠️ Essential Docker Commands
-
-| What You Want To Do | Command | Description |
+| Component | Technology | Role & Key Responsibilities |
 |---|---|---|
-| **Start everything** | `docker compose up -d` | Starts all services in the background (detached mode). |
-| **Rebuild after edits** | `docker compose up -d --build` | Rebuilds container images with latest code changes. |
-| **Check container health** | `docker compose ps` | Displays status (`healthy`, `running`, `exit`). |
-| **View live logs** | `docker compose logs -f` | Streams real-time operational logs across all services. |
-| **View backend logs only** | `docker compose logs -f backend` | Streams only backend API and error logs. |
-| **Manually seed data** | `docker compose exec backend npm run db:seed` | Runs full migration and synthetic dataset seed. |
-| **Run master regression** | `docker compose exec backend npm run test:regression` | Executes all 14 automated test suites in Docker. |
-| **Stop containers** | `docker compose down` | Stops containers safely. **Keeps your database data intact.** |
-| **Clean reset (Wipe DB)** | `docker compose down -v` | Stops containers and **deletes volumes** for a clean reset. |
+| **Frontend** | Next.js 16 (App Router), React 19, TypeScript, Tailwind | Responsive knowledge assistant UI, audience switcher, admin portal. |
+| **Backend API** | Node.js 22 LTS, Express, TypeScript, LangChain | REST API, auth middleware, request correlation, query condensation. |
+| **Database & Search** | PostgreSQL 16 + `pgvector` 0.8.6 | Relational ACL tables, 768-dim vector embeddings, and GIN full-text search. |
+| **Local AI Engine** | Ollama (`nomic-embed-text`, `qwen2.5:3b`) | Local inference for dense embeddings and grounded answer generation. |
+| **Containerization** | Docker, Docker Compose | Turnkey multi-container deployment with healthchecks and persistent volumes. |
 
 ---
 
-## 🔑 Development Test Personas (Pre-Seeded)
+## Quickstart (Docker Compose)
 
-All development accounts are seeded with default password: **`CloudDesk2026!`**
-
-| User ID | Name | Role / Persona | Tenant Scope | Clearance Groups | Use Case to Test |
-|---|---|---|---|---|---|
-| `emp_008` | Rafael Santos | **IT Security Admin** | `global` | `grp_it_security`, `grp_security_restricted` | Full access to `/admin`, identity management, audit logs, and confidential docs. |
-| `emp_003` | Elena Duarte | **Support Lead** | `*` (Wildcard) | `grp_support_leads`, `grp_support` | Accesses all customer tickets, but blocked from restricted security audits. |
-| `emp_001` | Priya Raman | **Support Agent** | `ten_brightwave`, `ten_lumenfield` | `grp_support` | Accesses Brightwave & Lumenfield; blocked from Harborpine tickets. |
-| `emp_002` | Marcus Webb | **Support Agent** | `ten_harborpine`, `ten_lumenfield` | `grp_support` | Accesses Harborpine & Lumenfield; blocked from Brightwave tickets. |
-| `cu_001` | Hannah Brooks | **Customer User** | `ten_brightwave` | `cust_ten_brightwave_users` | Strict customer quarantine; sees only customer-safe approved summaries. |
-| `cu_002` | Leo Navarro | **Customer User** | `ten_harborpine` | `cust_ten_harborpine_users` | Quarantined to Harborpine; blocked from Brightwave tickets. |
-
----
-
-## 💻 Alternative: Running Locally Without Docker
-
-If you prefer running services directly on your host machine without Docker:
+The fastest and most reproducible way to run AccessCore is via Docker Compose.
 
 ### 1. Prerequisites
-- **Node.js:** v20+ or v22+ LTS
-- **PostgreSQL:** v16 or v17 with `pgvector` enabled (`CREATE EXTENSION vector;`)
-- **Ollama:** Running on `http://localhost:11434` with `nomic-embed-text` and `qwen2.5:3b`
+- [Docker Desktop](https://www.docker.com/products/docker-desktop/) installed and running.
+- [Ollama](https://ollama.com/) running on your host machine with the verified models:
+  ```bash
+  ollama pull nomic-embed-text
+  ollama pull qwen2.5:3b
+  ```
+
+### 2. Launch Stack
+```bash
+# Clone the repository
+git clone https://github.com/haritech005/AccessCore.git
+cd AccessCore
+
+# Initialize environment configuration
+cp .env.example .env
+
+# Build and start all services in detached mode
+docker compose up -d --build
+```
+
+### 3. Access Services
+- **Web Interface:** [http://localhost:3000](http://localhost:3000)
+- **Backend API:** [http://localhost:4000](http://localhost:4000)
+- **Health Check & Diagnostics:** [http://localhost:4000/health](http://localhost:4000/health)
+
+*(Note: On initial startup, the backend automatically runs all schema migrations `001` through `007` and seeds synthetic identities and documents when `AUTO_SEED=true` is enabled in `.env`.)*
+
+---
+
+## Development Test Personas
+
+All development accounts are pre-seeded with the default password: **`CloudDesk2026!`**
+
+| User ID | Email | Role | Tenant Scope | Security Clearance | Purpose |
+|---|---|---|---|---|---|
+| `emp_008` | `rafael.santos@clouddesk.example.com` | **IT Security Admin** | `global` | `grp_it_security`, `grp_security_restricted` | Full administrative access to `/admin`, identity management, audit logs, and restricted docs. |
+| `emp_003` | `elena.duarte@clouddesk.example.com` | **Support Lead** | `*` (Wildcard) | `grp_support_leads`, `grp_support` | Accesses all customer tickets; blocked from restricted internal security audits. |
+| `emp_001` | `priya.raman@clouddesk.example.com` | **Support Agent** | `ten_brightwave`, `ten_lumenfield` | `grp_support` | Multi-tenant agent. Permitted for Brightwave and Lumenfield; strictly denied Harborpine tickets. |
+| `emp_002` | `marcus.webb@clouddesk.example.com` | **Support Agent** | `ten_harborpine`, `ten_lumenfield` | `grp_support` | Multi-tenant agent. Permitted for Harborpine and Lumenfield; strictly denied Brightwave tickets. |
+| `cu_001` | `hannah.brooks@brightwave.example.com` | **Customer User** | `ten_brightwave` | `cust_ten_brightwave_users` | Quarantined customer user. Authoritatively restricted to customer mode and approved summaries. |
+| `cu_002` | `leo.navarro@harborpine.example.com` | **Customer User** | `ten_harborpine` | `cust_ten_harborpine_users` | Quarantined customer user for Harborpine; strictly blocked from Brightwave resources. |
+
+---
+
+## Local Development (Without Docker)
+
+To run the application natively on your development machine:
+
+### 1. Prerequisites
+- Node.js 20+ or 22+ LTS
+- PostgreSQL 16+ with `pgvector` enabled (`CREATE EXTENSION IF NOT EXISTS vector;`)
+- Ollama running on `http://localhost:11434`
 
 ### 2. Backend Setup
 ```bash
 cd backend
 cp .env.example .env
 npm install
-npm run db:migrate        # Applies SQL migrations 001 through 007
-npm run db:seed           # Seeds tenants, users, documents, and policies
-npm run dev               # Starts API on http://localhost:4000
+npm run db:migrate        # Executes migrations 001 through 007
+npm run db:seed           # Seeds tenants, groups, identities, docs, and policies
+npm run dev               # Starts API server on http://localhost:4000
 ```
 
 ### 3. Frontend Setup
@@ -136,77 +126,91 @@ npm run dev               # Starts API on http://localhost:4000
 cd frontend
 cp .env.example .env
 npm install
-npm run dev               # Starts Next.js on http://localhost:3000
+npm run dev               # Starts Next.js development server on http://localhost:3000
 ```
 
 ---
 
-## 🛡️ Enterprise Architecture & Features
+## Key Enterprise Capabilities
 
-### 1. Document Governance & Effective Access Simulator (`/admin/documents`)
-- **Admin-Only Uploads:** Enforces server-side validation against empty files, >10MB, and unsupported extensions.
-- **Granular Classification:** Assigns Tenant ID, Sensitivity (`public`, `internal`, `confidential`, `restricted`), Disclosure Policy, and Security Groups.
-- **Effective Access Simulator:** Allows compliance officers to select any user persona and verify real-time whether that user is permitted to retrieve, preview, or download a document before publishing.
+### 1. Multi-Tenant SQL & Vector Isolation
+AccessCore enforces authorization at the database query layer:
+- **Zero Unauthorized Retrieval:** Vector similarity search filters candidates by `tenant_id` and security `access_groups` before chunks leave PostgreSQL.
+- **0ms LLM Bypass:** If a user queries an unauthorized document, the request is flagged at the retrieval stage, returning a standard refusal without invoking the LLM (0ms generation latency, 0 prompt tokens).
+- **Anti-Enumeration 404 Parity:** Unauthorized direct document lookups, citation previews, and downloads return HTTP 404 `DOCUMENT_NOT_FOUND` identical to nonexistent files, preventing ID enumeration.
 
-### 2. Identity, Role & Tenant Scoping (`/admin/users`, `/admin/roles-groups`)
-- **Multi-Tenant Scoping:** Assigns users to specific customer organizations or wildcard scopes.
-- **Role-Based Access Control:** Distinguishes between normal employees, customer users, and admin roles (`super_admin`, `security_admin`, `compliance_officer`).
-- **Safety Lockout Protection:** The system programmatically prevents disabling or demoting the last active administrator.
+### 2. Dual-Phase Disclosure Policy Engine
+AccessCore decouples authorization ("Who can access?") from disclosure ("What may be revealed?"):
+- **Audience Mode Enforcement:** Internal employees can toggle between `internal` and `customer` mode. Customer accounts are locked to `customer` mode; any attempt to request internal context returns HTTP 403.
+- **Approved Customer Summaries:** Confidential support tickets designated `approved_summary_only` have their raw engineering notes replaced by vetted, version-pinned customer summaries before reaching the LLM prompt.
+- **Post-Generation Validator:** Scans generated answers for leaked employee IDs, internal group names, confidential runbook titles, or foreign tenant metadata before displaying the response.
 
-### 3. Ingestion Recovery & Self-Healing Pipeline (`/admin/ingestion`)
-- **Pipeline Health Dashboard:** Real-time visibility into active, completed, and failed chunking jobs.
-- **Safe Retries:** Automatic error sanitization and monotonic version increments preventing collision.
-- **Atomic Re-indexing:** Old vector embeddings remain online and searchable while fresh embeddings generate.
-- **Stale Index Cleanup:** One-click operational recovery to purge orphan chunks and resynchronize drifted ACL metadata.
+### 3. Dual-Engine Hybrid Retrieval & Reciprocal Rank Fusion (RRF)
+Combines semantic understanding with exact lexical matching:
+- **Dense Vector Search:** 768-dim embeddings (`nomic-embed-text`) over cosine distance.
+- **Sparse Keyword Search:** Native PostgreSQL `tsvector` with GIN indexing for exact error codes (`CD-WHK-504`, `CD-API-429`) and ticket identifiers.
+- **RRF Candidate Fusion:** Merges ranked candidate lists using standard reciprocal rank scoring ($k=60$).
+- **Diversity Filtering:** Caps chunks per document (`max_chunks_per_doc = 2`, `diversity_threshold = 0.70`), preventing single verbose documents from dominating the retrieval context.
 
-### 4. Structured Logging & Compliance Audit Telemetry (`/admin/audit-logs`)
-- **Request Correlation:** End-to-end `x-request-id` and `x-correlation-id` propagation across all API calls and logs.
-- **Data Scrubbing:** Recursive redaction of sensitive credentials (`password`, `token`, `authorization`, `cookie`, `apiKey`, `prompt`).
-- **Masked Errors:** Internal 500 errors display generic messages with correlation IDs to users while recording diagnostics server-side.
-- **Compliance Export:** Streaming export of audit trails in CSV and JSON formats for SOC2/ISO27001 readiness.
+### 4. Conversational Query Condensation
+Handles multi-turn dialogue containing pronouns or elliptical follow-ups:
+- When a user asks *"How do I fix that timeout error?"*, a lightweight local prompt rewrites the dialogue history into a self-contained search query: *"How to fix CD-WHK-504 Gateway Timeout error"*.
+- **0ms Heuristic Bypass:** Single-turn queries skip condensation entirely, avoiding unnecessary latency on first questions.
 
-### 5. Multi-Turn Conversational Query Condensation
-- Uses a lightweight local model (`qwen2.5:3b`) to resolve pronoun references (*"How do I fix that timeout error?"* -> *"How to fix CD-WHK-504 Gateway Timeout error"*).
-- **0ms Heuristic Bypass:** Single-turn queries bypass LLM rewrite with zero added latency.
+### 5. Administrative Governance & Operational Recovery
+Available in the `/admin` portal (accessible to `emp_008`):
+- **Document Governance (`/admin/documents`):** Admin-only file upload, classification assignment, and an **Effective Access Simulator** that verifies whether specific users can view a document before publishing.
+- **Identity & Role Management (`/admin/users`, `/admin/roles-groups`):** Dynamic tenant scoping, group management, and lockout protection preventing accidental demotion of the last active administrator.
+- **Ingestion Operations (`/admin/ingestion`):** Health monitoring, safe retries (monotonic version increments, 3-attempt limit), atomic re-indexing, and stale chunk cleanups.
+- **Audit Telemetry (`/admin/audit-logs`):** Request correlation (`x-request-id`, `x-correlation-id`), sensitive credential scrubbing, and streaming compliance exports (CSV/JSON).
 
 ---
 
-## 🧪 Testing & Verification Suites
+## Retrieval Evaluation Benchmarks
 
-AccessCore includes comprehensive automated verification suites covering security, ingestion, and search quality:
+Evaluated against the authoritative 15-case synthetic benchmark dataset under live production conditions:
 
-```bash
-# In backend directory (or via docker compose exec backend <command>):
-
-# 1. Run Master Regression Suite (14 Suites, 225 Tests, 100% Pass Rate)
-npm run test:regression
-
-# 2. Run Comprehensive Security & Access Control Suite (59 Tests)
-npm run test:security
-
-# 3. Run Disclosure Policy & Customer Summary Suite (25 Tests)
-npm run test:disclosure:security
-
-# 4. Run Retrieval Benchmark Evaluation (15 Benchmark Cases)
-npm run eval:comprehensive
-```
-
-### Retrieval Evaluation Benchmark Results
-
-| Metric | Measured Value | Standard Target | Status |
+| Metric | Measured Value | Production Target | Status |
 |---|---|---|---|
-| **Recall@4 (Primary Cutoff)** | **100.0%** | &ge; 75% | **PASSED** |
-| **Recall@1** | 83.3% | &ge; 60% | **PASSED** |
-| **Recall@3** | 94.4% | &ge; 75% | **PASSED** |
-| **Mean Reciprocal Rank (MRR)** | **94.4%** | &ge; 80% | **PASSED** |
-| **Mean NDCG@4** | **94.5%** | &ge; 85% | **PASSED** |
-| **Security Isolation Rate** | **100.0%** | 100% | **PASSED** |
-| **Groundedness Compliance** | **93.3%** | &ge; 90% | **PASSED** |
+| **Recall@4 (Primary Cutoff)** | **100.0%** | &ge; 75.0% | **PASSED** |
+| **Recall@1** | **83.3%** | &ge; 60.0% | **PASSED** |
+| **Recall@3** | **94.4%** | &ge; 75.0% | **PASSED** |
+| **Mean Reciprocal Rank (MRR)** | **94.4%** | &ge; 80.0% | **PASSED** (Rank #1 dominant) |
+| **Mean NDCG@4** | **94.5%** | &ge; 85.0% | **PASSED** |
+| **Security Boundary Isolation** | **100.0%** | 100.0% | **PASSED** (0 cross-tenant leaks) |
+| **Groundedness Compliance** | **93.3%** | &ge; 90.0% | **PASSED** |
+| **Refusal Accuracy Rate** | **93.3%** | &ge; 90.0% | **PASSED** |
+| **Citation Validity Rate** | **86.7%** | &ge; 85.0% | **PASSED** |
 | **Median Retrieval Latency** | **123 ms** | < 250 ms | **PASSED** |
 
 ---
 
-## 📂 Project Structure
+## Test & Verification Battery
+
+The codebase includes comprehensive automated verification suites across all layers:
+
+```bash
+# Execute within backend directory (or via 'docker compose exec backend <command>'):
+
+# 1. Master Regression Suite (14 Suites, 225 Tests, 100% Pass Rate)
+npm run test:regression
+
+# 2. Comprehensive Security & Access Control Suite (59 Tests)
+npm run test:security
+
+# 3. Disclosure Policy & Prompt Injection Defense Suite (25 Tests)
+npm run test:disclosure:security
+
+# 4. Full Retrieval Benchmark Evaluation Suite (15 Test Cases)
+npm run eval:comprehensive
+
+# 5. End-to-End Portfolio Demonstration Walkthrough (8 Steps)
+npm run demo:portfolio
+```
+
+---
+
+## Project Structure
 
 ```
 AccessCore/
@@ -215,13 +219,14 @@ AccessCore/
 ├── assets/                      # Synthetic CloudDesk documentation & tickets
 │   ├── product-documents/       # Markdown runbooks & guides (PDOC-0001..0004)
 │   └── support-tickets/         # JSON tickets (TKT-10421, TKT-10467, TKT-10533)
-├── backend/                     # Express TypeScript Backend
+├── backend/                     # Express TypeScript API Service
 │   ├── Dockerfile               # Multi-stage production backend image
 │   ├── docker-entrypoint.sh     # Auto-migration & auto-seed boot script
 │   ├── migrations/              # PostgreSQL SQL migrations (001 through 007)
 │   └── src/
-│       ├── config/              # Central configuration & Zod schemas
+│       ├── config/              # Central configuration & Zod validation
 │       ├── db/                  # Database connection & seed scripts (seedAll.ts)
+│       ├── evaluation/          # Evaluation metrics engine & benchmark datasets
 │       ├── middleware/          # Auth, CSRF, error handling, correlation ID
 │       ├── routes/              # Chat, Documents, Citations, Admin, Health
 │       └── services/            # Retrieval, Ingestion, Logging, Audit, Security
@@ -230,10 +235,11 @@ AccessCore/
     └── src/
         ├── app/                 # Next.js App Router (/chat, /admin)
         ├── components/          # Admin consoles, Chat, Citations, Modals
-        └── lib/                 # API client & authentication session hooks
+        └── lib/                 # Typed API client & session hooks
 ```
 
 ---
 
-## 📄 License
-ISC License — AccessCore Project.
+## License
+
+AccessCore is released under the [ISC License](LICENSE).
