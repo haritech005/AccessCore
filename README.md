@@ -53,6 +53,35 @@ AccessCore is architected as an isolated, local-first enterprise platform with z
 
 ---
 
+## 📸 Application Interface & Visual Tour
+
+### 1. Knowledge Assistant Landing & Audience Switcher
+A responsive enterprise interface featuring a collapsible conversational sidebar, prompt starters, and active audience mode selection (`Internal` vs `Customer-Safe`).
+
+![Knowledge Assistant Landing](screenshots/01-knowledge-assistant-landing.png)
+
+### 2. Enterprise Authentication & Identity Scoping
+Secure credential verification supporting work emails or user IDs (`emp_001`..`emp_008`, `cu_001`..`cu_003`), dynamically mapping tenant scopes and ReBAC permission clearances.
+
+![Enterprise Authentication](screenshots/02-enterprise-authentication.png)
+
+### 3. Grounded RAG Chat with Citation Badges
+Priya Raman (`emp_001`, Support Agent) querying webhook timeout error codes (`CD-WHK-504`). Combines dense vector and sparse lexical retrieval via Reciprocal Rank Fusion (RRF) into grounded answers with interactive citation badges.
+
+![Grounded RAG Chat](screenshots/03-grounded-chat-citations.png)
+
+### 4. Citation Provenance & Evidence Verification Drawer
+Side-by-side evidence inspection displaying verbatim retrieved text passages, source document IDs (`PDOC-0002`), sensitivity classifications (`public`), chunk index numbers, and disclosure policies (`customer_shareable`).
+
+![Citation Provenance Drawer](screenshots/04-citation-provenance-drawer.png)
+
+### 5. Permission-Aware Document Library Drawer
+Interactive document repository presenting exclusively the records authorized within the user's tenant boundaries and security group memberships (e.g. Brightwave and Lumenfield documents for Priya Raman; strictly zero foreign Harborpine records).
+
+![Document Library Drawer](screenshots/05-permitted-document-library.png)
+
+---
+
 ## Quickstart (Docker Compose)
 
 The fastest and most reproducible way to run AccessCore is via Docker Compose.
