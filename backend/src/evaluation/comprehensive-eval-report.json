@@ -1,5 +1,5 @@
 {
-  "timestamp": "2026-11-12T18:04:05.538Z",
+  "timestamp": "2026-11-17T17:08:40.661Z",
   "datasetVersion": "1.0 (15 Authoritative Synthetic Cases)",
   "totalCases": 15,
   "passedCases": 13,
@@ -23,28 +23,28 @@
   },
   "latencyProfile": {
     "retrieval": {
-      "min": 77,
-      "max": 287,
-      "mean": 133,
-      "median": 123,
-      "p90": 173,
-      "p95": 287
+      "min": 53,
+      "max": 178,
+      "mean": 83,
+      "median": 70,
+      "p90": 150,
+      "p95": 178
     },
     "generation": {
       "min": 0,
-      "max": 95426,
-      "mean": 42422,
-      "median": 41873,
-      "p90": 85240,
-      "p95": 95426
+      "max": 73317,
+      "mean": 19447,
+      "median": 18653,
+      "p90": 26227,
+      "p95": 73317
     },
     "endToEnd": {
-      "min": 99,
-      "max": 97495,
-      "mean": 42696,
-      "median": 42019,
-      "p90": 85412,
-      "p95": 97495
+      "min": 54,
+      "max": 75025,
+      "mean": 19643,
+      "median": 18715,
+      "p90": 26281,
+      "p95": 75025
     }
   },
   "progressionComparison": [
@@ -73,7 +73,7 @@
       "stage": "Subphase 4.7: Comprehensive Final Evaluation",
       "passRate": "86.7%",
       "recallAt4": "100.0%",
-      "medianRetrievalMs": 123,
+      "medianRetrievalMs": 70,
       "notes": "Verified 100% pass rate, 94.4% MRR, 100% citation validity, and full latency percentiles."
     }
   ],
@@ -123,13 +123,13 @@
         "grounded": true,
         "matchedKeywords": [
           "10",
+          "exponential",
           "retry"
         ],
         "missingKeywords": [
-          "gateway timeout",
-          "exponential"
+          "gateway timeout"
         ],
-        "keywordCoverageRate": 0.5,
+        "keywordCoverageRate": 0.75,
         "properRefusal": true,
         "unauthorizedLeakDetected": false,
         "issues": []
@@ -138,10 +138,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 153,
-        "filteringMs": 4,
-        "generationMs": 85240,
-        "totalMs": 85412
+        "retrievalMs": 67,
+        "filteringMs": 1,
+        "generationMs": 21210,
+        "totalMs": 21284
       }
     },
     {
@@ -202,10 +202,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 138,
-        "filteringMs": 1,
-        "generationMs": 41873,
-        "totalMs": 42019
+        "retrievalMs": 150,
+        "filteringMs": 0,
+        "generationMs": 16654,
+        "totalMs": 16806
       }
     },
     {
@@ -269,10 +269,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 120,
-        "filteringMs": 2,
-        "generationMs": 60798,
-        "totalMs": 60924
+        "retrievalMs": 56,
+        "filteringMs": 0,
+        "generationMs": 26062,
+        "totalMs": 26120
       }
     },
     {
@@ -335,10 +335,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 173,
-        "filteringMs": 61,
-        "generationMs": 55527,
-        "totalMs": 55765
+        "retrievalMs": 178,
+        "filteringMs": 14,
+        "generationMs": 19179,
+        "totalMs": 19373
       }
     },
     {
@@ -403,10 +403,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 287,
-        "filteringMs": 1,
-        "generationMs": 47240,
-        "totalMs": 47531
+        "retrievalMs": 90,
+        "filteringMs": 0,
+        "generationMs": 22994,
+        "totalMs": 23086
       }
     },
     {
@@ -465,14 +465,14 @@
         "unauthorizedLeakDetected": false,
         "issues": []
       },
-      "answerExcerpt": "The school administrative console, which is built by Lumenfield Academy, is displaying outdated ticket metrics due to API rate-limit errors. Lumenfield's suppor...",
+      "answerExcerpt": "The school administrative console is displaying outdated ticket metrics due to API rate-limit errors reported by the customer Lumenfield Academy. The customer r...",
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 90,
-        "filteringMs": 1,
-        "generationMs": 52946,
-        "totalMs": 53043
+        "retrievalMs": 53,
+        "filteringMs": 0,
+        "generationMs": 26227,
+        "totalMs": 26281
       }
     },
     {
@@ -516,10 +516,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 160,
+        "retrievalMs": 70,
         "filteringMs": 0,
         "generationMs": 0,
-        "totalMs": 161
+        "totalMs": 70
       }
     },
     {
@@ -568,10 +568,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 104,
-        "filteringMs": 1,
-        "generationMs": 28496,
-        "totalMs": 28604
+        "retrievalMs": 71,
+        "filteringMs": 0,
+        "generationMs": 13857,
+        "totalMs": 13929
       }
     },
     {
@@ -620,10 +620,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 118,
+        "retrievalMs": 86,
         "filteringMs": 0,
-        "generationMs": 30949,
-        "totalMs": 31071
+        "generationMs": 13559,
+        "totalMs": 13646
       }
     },
     {
@@ -672,10 +672,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 123,
+        "retrievalMs": 69,
         "filteringMs": 0,
-        "generationMs": 30961,
-        "totalMs": 31087
+        "generationMs": 9973,
+        "totalMs": 10044
       }
     },
     {
@@ -708,9 +708,9 @@
       },
       "citations": [
         {
-          "document_id": "TKT-10421",
+          "document_id": "PDOC-0001",
           "is_summary": false,
-          "title": "Brightwave webhook delivery timeouts"
+          "title": "Webhook Delivery Troubleshooting"
         }
       ],
       "citationEval": {
@@ -734,14 +734,14 @@
         "unauthorizedLeakDetected": false,
         "issues": []
       },
-      "answerExcerpt": "Error code CD-WHK-504 indicates that CloudDesk sent an event to your webhook endpoint and did not receive a response within 10 seconds. The error suggests that ...",
+      "answerExcerpt": "Error code CD-WHK-504 indicates that CloudDesk sent an event to your webhook endpoint and did not receive a response within 10 seconds. This error does not spec...",
       "passed": false,
       "latencies": {
-        "condensationMs": 12624,
-        "retrievalMs": 108,
-        "filteringMs": 1,
-        "generationMs": 95426,
-        "totalMs": 97495
+        "condensationMs": 2381,
+        "retrievalMs": 57,
+        "filteringMs": 0,
+        "generationMs": 73317,
+        "totalMs": 75025
       }
     },
     {
@@ -759,8 +759,8 @@
       "retrievedDocumentIds": [
         "PDOC-0004",
         "PDOC-0004",
-        "PDOC-0001",
-        "PDOC-0003"
+        "PDOC-0003",
+        "PDOC-0001"
       ],
       "retrievalMetrics": {
         "recallAt1": 1,
@@ -803,10 +803,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 127,
+        "retrievalMs": 72,
         "filteringMs": 0,
-        "generationMs": 46640,
-        "totalMs": 46770
+        "generationMs": 21333,
+        "totalMs": 21406
       }
     },
     {
@@ -850,10 +850,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 96,
+        "retrievalMs": 53,
         "filteringMs": 0,
         "generationMs": 0,
-        "totalMs": 99
+        "totalMs": 54
       }
     },
     {
@@ -915,10 +915,10 @@
       "passed": true,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 123,
-        "filteringMs": 1,
-        "generationMs": 41224,
-        "totalMs": 41349
+        "retrievalMs": 61,
+        "filteringMs": 0,
+        "generationMs": 18653,
+        "totalMs": 18715
       }
     },
     {
@@ -970,10 +970,10 @@
       "passed": false,
       "latencies": {
         "condensationMs": 0,
-        "retrievalMs": 77,
+        "retrievalMs": 105,
         "filteringMs": 0,
-        "generationMs": 19005,
-        "totalMs": 19105
+        "generationMs": 8691,
+        "totalMs": 8811
       }
     }
   ]
