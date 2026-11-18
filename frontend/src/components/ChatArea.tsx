@@ -232,25 +232,72 @@ export function ChatArea({
                   />
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    {/* Mode badge */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                      <span
-                        style={{
-                          fontSize: '0.725rem',
-                          fontWeight: 600,
-                          padding: '3px 8px',
-                          borderRadius: '6px',
-                          backgroundColor:
-                            audienceMode === 'customer' ? 'rgba(16, 185, 129, 0.15)' : 'rgba(99, 102, 241, 0.15)',
-                          color: audienceMode === 'customer' ? '#34d399' : '#a5b4fc',
-                          border:
-                            audienceMode === 'customer'
-                              ? '1px solid rgba(16, 185, 129, 0.3)'
-                              : '1px solid rgba(99, 102, 241, 0.3)',
-                        }}
-                      >
-                        {audienceMode === 'customer' ? '🌐 Customer-Safe' : '🏢 Internal Mode'}
-                      </span>
+                    {/* Audience Mode Toggle */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      {currentUser?.user_type === 'customer_user' ? (
+                        <span
+                          style={{
+                            fontSize: '0.725rem',
+                            fontWeight: 600,
+                            padding: '3px 8px',
+                            borderRadius: '6px',
+                            backgroundColor: 'rgba(16, 185, 129, 0.15)',
+                            color: '#34d399',
+                            border: '1px solid rgba(16, 185, 129, 0.3)',
+                          }}
+                        >
+                          🔒 Customer-Safe (Locked)
+                        </span>
+                      ) : (
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            backgroundColor: 'rgba(255, 255, 255, 0.04)',
+                            border: '1px solid rgba(255, 255, 255, 0.09)',
+                            borderRadius: '7px',
+                            padding: '2px',
+                            gap: '2px',
+                          }}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => onAudienceModeChange('internal')}
+                            style={{
+                              padding: '3px 9px',
+                              borderRadius: '5px',
+                              border: 'none',
+                              fontSize: '0.725rem',
+                              fontWeight: 600,
+                              backgroundColor: audienceMode === 'internal' ? '#4f46e5' : 'transparent',
+                              color: audienceMode === 'internal' ? '#ffffff' : '#94a3b8',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                            title="Internal Mode: Full access to internal runbooks, engineering tickets, and internal diagnostic notes"
+                          >
+                            🏢 Internal
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => onAudienceModeChange('customer')}
+                            style={{
+                              padding: '3px 9px',
+                              borderRadius: '5px',
+                              border: 'none',
+                              fontSize: '0.725rem',
+                              fontWeight: 600,
+                              backgroundColor: audienceMode === 'customer' ? '#059669' : 'transparent',
+                              color: audienceMode === 'customer' ? '#ffffff' : '#94a3b8',
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                            title="Customer-Safe Mode: Prunes internal runbooks and redacts sensitive engineering notes with approved customer summaries"
+                          >
+                            🌐 Customer-Safe
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     <button
